@@ -1,0 +1,15 @@
+# Node.js
+node_modules/
+.env
+
+# Build files
+client/node_modules/
+client/dist/
+
+# System / editor junk
+.DS_Store
+Thumbs.db
+*.log
+
+# Local database stuff (if any)
+*.sqlite
