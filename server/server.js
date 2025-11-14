@@ -1,53 +1,41 @@
-// server.js
-import express from "express";
-import cors from "cors";
-import sequelize from "./db.js";
-import User from "./models/User.js";
-import AdminJS from "adminjs";
-import AdminJSExpress from "@adminjs/express";
-import AdminJSSequelize from "@adminjs/sequelize";
+// server/server.js
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+dotenv.config();
 
-// Register Sequelize adapter
-AdminJS.registerAdapter(AdminJSSequelize);
+import { sequelize } from './models/index.js';
+import authRoutes from './routes/auth.js';
+import productsRoutes from './routes/products.js';
+import ordersRoutes from './routes/orders.js';
+import { buildAdminRouter } from './admin.js';
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 
-// ✅ Enable JSON + CORS so React (localhost:5173) can talk to backend
+app.use(cors());
 app.use(express.json());
-app.use(
-  cors({
-    origin: "http://localhost:5173", // allow React dev server
-    credentials: true,
-  })
-);
 
-// ✅ AdminJS setup
-const adminJs = new AdminJS({
-  databases: [sequelize],
-  rootPath: "/admin",
-});
+app.use('/api/auth', authRoutes);
+app.use('/api/products', productsRoutes);
+app.use('/api/orders', ordersRoutes);
 
-const adminRouter = AdminJSExpress.buildRouter(adminJs);
-app.use(adminJs.options.rootPath, adminRouter);
-
-// ✅ Example test route for React
-app.get("/api/test", (req, res) => {
-  res.json({ message: "Hello from Node.js + AdminJS backend!" });
-});
-
-// ✅ Simple root route
-app.get("/", (req, res) => res.send("Hello worldi"));
-
-// ✅ Sync database and start server
 (async () => {
   try {
+    await sequelize.authenticate();
+    console.log('DB connected');
+    // dev convenience
     await sequelize.sync({ alter: true });
-    console.log("Database synced ✅");
+    console.log('Sequelize synced (alter:true)');
 
-    app.listen(3001, () =>
-      console.log("🚀 Backend running on http://localhost:3001")
-    );
+    await buildAdminRouter(app);
+    console.log('AdminJS mounted at /admin');
+
+    app.listen(PORT, () => {
+      console.log(`Server listening on http://localhost:${PORT}`);
+    });
   } catch (err) {
-    console.error("Error syncing database:", err);
+    console.error('Startup error', err);
+    process.exit(1);
   }
 })();
