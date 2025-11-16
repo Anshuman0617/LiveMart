@@ -4,13 +4,15 @@ import defineUser from './user.js';
 import defineProduct from './product.js';
 import defineOrder from './order.js';
 import defineOrderItem from './orderItem.js';
+import defineReview from './review.js';
 
 const User = defineUser(sequelize);
 const Product = defineProduct(sequelize);
 const Order = defineOrder(sequelize);
 const OrderItem = defineOrderItem(sequelize);
+const Review = defineReview(sequelize);
 
-// associations
+// Associations
 User.hasMany(Order, { as: 'orders', foreignKey: 'userId' });
 Order.belongsTo(User, { as: 'user', foreignKey: 'userId' });
 
@@ -20,4 +22,12 @@ OrderItem.belongsTo(Order, { foreignKey: 'orderId' });
 Product.hasMany(OrderItem, { as: 'orderItems', foreignKey: 'productId' });
 OrderItem.belongsTo(Product, { foreignKey: 'productId' });
 
-export { sequelize, User, Product, Order, OrderItem };
+User.hasMany(Product, { foreignKey: 'ownerId', as: 'products' });
+Product.belongsTo(User, { foreignKey: 'ownerId', as: 'owner' });
+
+User.hasMany(Review, { foreignKey: 'userId', as: 'reviews' });
+Product.hasMany(Review, { foreignKey: 'productId', as: 'reviews' });
+Review.belongsTo(User, { foreignKey: 'userId' });
+Review.belongsTo(Product, { foreignKey: 'productId' });
+
+export { sequelize, User, Product, Order, OrderItem, Review };

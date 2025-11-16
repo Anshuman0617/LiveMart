@@ -3,13 +3,13 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { sequelize, User, Product } from './models/index.js';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 
 async function seed() {
   await sequelize.sync({ alter: true });
 
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
-  const adminPass = process.env.ADMIN_PASSWORD || 'adminpassword';
+  const adminPass = process.env.ADMIN_PASSWORD || 'admin123';
   const existingAdmin = await User.findOne({ where: { email: adminEmail }});
   if (!existingAdmin) {
     const h = await bcrypt.hash(adminPass, 10);
@@ -26,9 +26,9 @@ async function seed() {
   const count = await Product.count();
   if (count === 0) {
     await Product.bulkCreate([
-      { title: 'Apples (1kg)', description: 'Fresh apples', price: 2.50, stock: 100, imageUrl: '' },
-      { title: 'Rice (5kg)', description: 'Basmati rice', price: 20.00, stock: 50, imageUrl: '' },
-      { title: 'Shampoo 200ml', description: 'Haircare', price: 5.00, stock: 200, imageUrl: '' }
+      { title: 'Apples (1kg)', description: 'Fresh apples', price: 2.50, stock: 100, ownerId: 1, ownerType: 'retailer' },
+      { title: 'Rice (5kg)', description: 'Basmati rice', price: 20.00, stock: 50, ownerId: 1, ownerType: 'wholesaler' },
+      { title: 'Shampoo 200ml', description: 'Haircare', price: 5.00, stock: 200, ownerId: 1, ownerType: 'retailer' }
     ]);
     console.log('Seeded products');
   }
