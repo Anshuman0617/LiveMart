@@ -1,6 +1,6 @@
 // client/src/pages/WholesaleProducts.jsx
 import React, { useEffect, useState } from "react";
-import { api, authHeader } from "../api";
+import { api } from "../api";
 
 export default function WholesaleProducts() {
   const [products, setProducts] = useState([]);
@@ -17,21 +17,38 @@ export default function WholesaleProducts() {
     load();
   }, []);
 
-  const buy = async (productId) => {
-    const qty = quantity[productId] || 1;
+  const addToWholesaleCart = (productId) => {
+    const product = products.find((p) => p.id === productId);
+    if (!product) return;
 
-    try {
-      await api.post(
-        `/products/${productId}/buy-from-wholesaler`,
-        { quantity: qty },
-        { headers: authHeader() }
-      );
-
-      alert("Purchased wholesale successfully!");
-      load();
-    } catch (err) {
-      alert("Unable to buy: " + err.response?.data?.error);
+    const qty = parseInt(quantity[productId] || 1, 10);
+    if (qty < 1) {
+      alert("Quantity must be at least 1");
+      return;
     }
+
+    // Get user-specific wholesale cart
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    const userId = user?.id;
+    const cartKey = userId ? `wholesaleCart_${userId}` : 'wholesaleCart';
+    const cart = JSON.parse(localStorage.getItem(cartKey) || "[]");
+    const existing = cart.find((c) => c.productId === productId);
+
+    if (existing) {
+      existing.quantity += qty;
+    } else {
+      cart.push({
+        productId: product.id,
+        title: product.title,
+        price: product.price,
+        quantity: qty,
+      });
+    }
+
+    localStorage.setItem(cartKey, JSON.stringify(cart));
+    alert("Added to wholesale cart!");
+    // Reset quantity input
+    setQuantity({ ...quantity, [productId]: "" });
   };
 
   return (
@@ -51,7 +68,7 @@ export default function WholesaleProducts() {
             />
           )}
 
-          <div style={{ marginTop: 8 }}>
+          <div style={{ marginTop: 8, display: "flex", gap: 10 }}>
             <input
               type="number"
               min="1"
@@ -62,8 +79,8 @@ export default function WholesaleProducts() {
                 setQuantity({ ...quantity, [p.id]: e.target.value })
               }
             />
-            <button style={{ marginLeft: 10 }} onClick={() => buy(p.id)}>
-              Buy Wholesale
+            <button onClick={() => addToWholesaleCart(p.id)}>
+              Add to Cart
             </button>
           </div>
         </div>

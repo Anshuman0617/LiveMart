@@ -42,8 +42,13 @@ export default function GoogleLoginButton({ onSuccess }) {
               const res = await api.post('/auth/google', { idToken: response.credential });
               localStorage.setItem('token', res.data.token);
               localStorage.setItem('user', JSON.stringify(res.data.user));
+              // Dispatch event to update Navbar
+              window.dispatchEvent(new Event('userLogin'));
 
-              if (onSuccess) {
+              // For retailers, reload to ensure Navbar updates properly
+              if (res.data.user.role === 'retailer') {
+                window.location.href = '/retailer';
+              } else if (onSuccess) {
                 onSuccess(res.data.user);
               } else {
                 // Default behavior: navigate to home

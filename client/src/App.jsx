@@ -10,6 +10,7 @@ import WholesalerDashboard from "./pages/WholesalerDashboard";
 import ProductDetail from "./pages/ProductDetail";
 import WholesaleProducts from "./pages/WholesaleProducts";
 import Cart from "./pages/Cart";
+import WholesaleCart from "./pages/WholesaleCart";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentFailure from "./pages/PaymentFailure";
 
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="/wholesaler" element={<WholesalerDashboard />} />
 
         <Route path="/cart" element={<Cart />} />
+        <Route path="/wholesale-cart" element={<WholesaleCart />} />
         <Route path="/payment-success" element={<PaymentSuccess />} />
         <Route path="/payment-failure" element={<PaymentFailure />} />
 

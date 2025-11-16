@@ -14,7 +14,11 @@ export default function Cart() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const c = JSON.parse(localStorage.getItem("cart") || "[]");
+    // Get user-specific cart
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    const userId = user?.id;
+    const cartKey = userId ? `cart_${userId}` : 'cart';
+    const c = JSON.parse(localStorage.getItem(cartKey) || "[]");
     setCart(c);
     
     // Load user's saved address and details
@@ -44,7 +48,10 @@ export default function Cart() {
 
   const updateCart = (c) => {
     setCart(c);
-    localStorage.setItem("cart", JSON.stringify(c));
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    const userId = user?.id;
+    const cartKey = userId ? `cart_${userId}` : 'cart';
+    localStorage.setItem(cartKey, JSON.stringify(c));
   };
 
   const increment = (id) => {

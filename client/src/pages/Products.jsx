@@ -2,11 +2,21 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { api } from "../api";
 import AddressAutocomplete from "../components/AddressAutocomplete";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import debounce from "lodash.debounce";
 
 export default function Products() {
   const [products, setProducts] = useState([]);
+  const navigate = useNavigate();
+  
+  // Check if user is a retailer - they shouldn't see regular products
+  useEffect(() => {
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    if (user?.role === 'retailer') {
+      alert('Retailers can only view and manage their own products. Redirecting to Retailer Dashboard.');
+      navigate('/retailer');
+    }
+  }, [navigate]);
 
   // filters
   const [q, setQ] = useState("");
@@ -253,7 +263,10 @@ export default function Products() {
 
             <button
               onClick={() => {
-                const cart = JSON.parse(localStorage.getItem("cart") || "[]");
+                const user = JSON.parse(localStorage.getItem('user') || 'null');
+                const userId = user?.id;
+                const cartKey = userId ? `cart_${userId}` : 'cart';
+                const cart = JSON.parse(localStorage.getItem(cartKey) || "[]");
                 const existing = cart.find((c) => c.productId === p.id);
 
                 if (existing) existing.quantity++;
@@ -265,7 +278,7 @@ export default function Products() {
                     quantity: 1,
                   });
 
-                localStorage.setItem("cart", JSON.stringify(cart));
+                localStorage.setItem(cartKey, JSON.stringify(cart));
                 alert("Added to cart!");
               }}
             >

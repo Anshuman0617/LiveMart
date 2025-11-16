@@ -50,8 +50,11 @@ export default function PaymentSuccess() {
 
         if (verifyRes.data.success) {
           setMessage("Payment successful! Your order has been placed.");
-          // Clear cart and pending order
-          localStorage.removeItem("cart");
+          // Clear user-specific cart and pending order
+          const user = JSON.parse(localStorage.getItem('user') || 'null');
+          const userId = user?.id;
+          const cartKey = userId ? `cart_${userId}` : 'cart';
+          localStorage.removeItem(cartKey);
           sessionStorage.removeItem("pendingOrder");
           
           // Redirect to home after 3 seconds

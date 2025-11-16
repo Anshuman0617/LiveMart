@@ -17,7 +17,15 @@ export default function Login() {
       const res = await api.post("/auth/login", { email, password });
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("user", JSON.stringify(res.data.user));
-      nav("/");
+      // Dispatch event to update Navbar
+      window.dispatchEvent(new Event('userLogin'));
+      
+      // For retailers, reload to ensure Navbar updates properly
+      if (res.data.user.role === 'retailer') {
+        window.location.href = '/retailer';
+      } else {
+        nav("/");
+      }
     } catch {
       alert("Invalid email or password");
     }
@@ -34,7 +42,15 @@ export default function Login() {
 
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("user", JSON.stringify(res.data.user));
-      nav("/");
+      // Dispatch event to update Navbar
+      window.dispatchEvent(new Event('userLogin'));
+      
+      // For retailers, reload to ensure Navbar updates properly
+      if (res.data.user.role === 'retailer') {
+        window.location.href = '/retailer';
+      } else {
+        nav("/");
+      }
     } catch (err) {
       alert("Registration failed");
     }
