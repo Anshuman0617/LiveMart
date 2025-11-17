@@ -253,11 +253,44 @@ export default function Products() {
             </h3>
 
             <p>{p.description}</p>
-            <p><strong>Price:</strong> ₹{(p.price*(1-p.discount/100)).toFixed(2)}</p>
-
-            {p.discount ? (
-              <p><strong>Discount:</strong> {p.discount}%</p>
-            ) : null}
+            
+            {/* Price with discount indicator */}
+            <div style={{ marginBottom: "8px" }}>
+              {p.discount && p.discount > 0 ? (
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px", flexWrap: "wrap" }}>
+                    <span style={{ 
+                      fontSize: "20px", 
+                      fontWeight: "bold", 
+                      color: "#22c55e" 
+                    }}>
+                      ₹{(p.price*(1-p.discount/100)).toFixed(2)}
+                    </span>
+                    <span style={{ 
+                      fontSize: "14px", 
+                      color: "#999", 
+                      textDecoration: "line-through" 
+                    }}>
+                      ₹{parseFloat(p.price).toFixed(2)}
+                    </span>
+                    <span style={{ 
+                      fontSize: "12px", 
+                      color: "#dc2626", 
+                      fontWeight: "600",
+                      backgroundColor: "#fee2e2",
+                      padding: "2px 6px",
+                      borderRadius: "4px"
+                    }}>
+                      {p.discount}% OFF
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <p style={{ margin: 0, fontSize: "18px", fontWeight: "bold" }}>
+                  <strong>Price:</strong> ₹{parseFloat(p.price).toFixed(2)}
+                </p>
+              )}
+            </div>
 
             {p.distanceKm !== null && (
               <p><strong>Distance:</strong> {p.distanceKm} km</p>
@@ -285,6 +318,20 @@ export default function Products() {
                 localStorage.setItem(cartKey, JSON.stringify(cart));
                 alert("Added to cart!");
               }}
+              style={{
+                backgroundColor: "#3399cc",
+                color: "white",
+                border: "none",
+                padding: "10px 20px",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontSize: "14px",
+                fontWeight: "600",
+                transition: "background 0.2s",
+                width: "100%"
+              }}
+              onMouseEnter={(e) => e.target.style.backgroundColor = "#2a7ba0"}
+              onMouseLeave={(e) => e.target.style.backgroundColor = "#3399cc"}
             >
               Add to Cart
             </button>
