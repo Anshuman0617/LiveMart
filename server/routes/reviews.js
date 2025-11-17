@@ -1,11 +1,11 @@
 // server/routes/reviews.js
 import express from 'express';
 import { authMiddleware } from '../middleware/auth.js';
-import { Review, Product } from '../models/index.js';
+import { Review, Product, User } from '../models/index.js';
 
 const router = express.Router();
 
-// Add review
+// Add or update review (one per user)
 router.post('/', authMiddleware, async (req, res) => {
   try {
     const { productId, rating, text } = req.body;
@@ -16,12 +16,30 @@ router.post('/', authMiddleware, async (req, res) => {
     const p = await Product.findByPk(productId);
     if (!p) return res.status(404).json({ error: "Product not found" });
 
-    const review = await Review.create({
-      userId: req.user.id,
-      productId,
-      rating,
-      text
+    // Check if user already has a review for this product
+    const existingReview = await Review.findOne({
+      where: {
+        userId: req.user.id,
+        productId: productId
+      }
     });
+
+    let review;
+    if (existingReview) {
+      // Update existing review
+      review = await existingReview.update({
+        rating,
+        text: text || existingReview.text
+      });
+    } else {
+      // Create new review
+      review = await Review.create({
+        userId: req.user.id,
+        productId,
+        rating,
+        text
+      });
+    }
 
     // Update product rating summary
     const all = await Review.findAll({ where: { productId }});
@@ -39,13 +57,30 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 });
 
-// Get reviews for product
+// Get reviews for product (with optional star filter)
 router.get('/:productId', async (req, res) => {
-  const reviews = await Review.findAll({
-    where: { productId: req.params.productId },
-    include: [{ association: "user", attributes: ["id","name","picture"] }]
-  });
-  res.json(reviews);
+  try {
+    const { productId } = req.params;
+    const { rating } = req.query; // Filter by rating (1-5)
+
+    const whereClause = { productId };
+    
+    // If rating filter is provided, add it to the where clause
+    if (rating && !isNaN(rating) && rating >= 1 && rating <= 5) {
+      whereClause.rating = parseInt(rating, 10);
+    }
+
+    const reviews = await Review.findAll({
+      where: whereClause,
+      include: [{ model: User, as: 'user', attributes: ["id","name","picture"] }],
+      order: [['createdAt', 'DESC']] // Show latest reviews first
+    });
+    
+    res.json(reviews);
+  } catch (err) {
+    console.error("GET REVIEWS ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
 });
 
 export default router;

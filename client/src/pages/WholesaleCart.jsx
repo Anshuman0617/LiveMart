@@ -1,10 +1,15 @@
 // client/src/pages/WholesaleCart.jsx
 import React, { useState, useEffect } from "react";
 import { api, authHeader } from "../api";
+import AddressAutocomplete from "../components/AddressAutocomplete";
 import { useNavigate } from "react-router-dom";
 
 export default function WholesaleCart() {
   const [cart, setCart] = useState([]);
+  const [address, setAddress] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -15,6 +20,30 @@ export default function WholesaleCart() {
     const cartKey = userId ? `wholesaleCart_${userId}` : 'wholesaleCart';
     const c = JSON.parse(localStorage.getItem(cartKey) || "[]");
     setCart(c);
+    
+    // Load user's saved address and details
+    const loadUserDetails = async () => {
+      try {
+        const res = await api.get("/users/me");
+        const user = res.data;
+        if (user.address) {
+          setAddress(user.address);
+        }
+        if (user.name) {
+          setFirstName(user.name);
+        }
+        if (user.email) {
+          setEmail(user.email);
+        }
+        if (user.phone) {
+          setPhone(user.phone);
+        }
+      } catch (err) {
+        // User not logged in or error - that's okay
+        console.log("Could not load user details:", err);
+      }
+    };
+    loadUserDetails();
   }, []);
 
   const updateCart = (c) => {
@@ -48,16 +77,26 @@ export default function WholesaleCart() {
     0
   );
 
-  const handlePurchase = async () => {
+  const handleCheckout = async () => {
     if (cart.length === 0) {
       alert("Your wholesale cart is empty!");
+      return;
+    }
+
+    if (!address.trim()) {
+      alert("Please enter a shipping address");
+      return;
+    }
+
+    if (!firstName.trim() || !email.trim() || !phone.trim()) {
+      alert("Please fill in all required details (Name, Email, Phone)");
       return;
     }
 
     // Check if user is logged in
     const token = localStorage.getItem("token");
     if (!token) {
-      alert("Please log in to proceed with purchase");
+      alert("Please log in to proceed with checkout");
       navigate("/login");
       return;
     }
@@ -65,32 +104,51 @@ export default function WholesaleCart() {
     setLoading(true);
 
     try {
-      // Purchase each item in the cart
-      for (const item of cart) {
-        try {
-          await api.post(
-            `/products/${item.productId}/buy-from-wholesaler`,
-            { quantity: item.quantity },
-            { headers: authHeader() }
-          );
-        } catch (err) {
-          console.error(`Failed to purchase ${item.title}:`, err);
-          alert(`Failed to purchase ${item.title}. ${err.response?.data?.error || 'Please try again.'}`);
-        }
-      }
+      // Prepare items for order
+      const items = cart.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+      }));
 
-      alert("All wholesale purchases completed!");
-      // Clear cart
-      const user = JSON.parse(localStorage.getItem('user') || 'null');
-      const userId = user?.id;
-      const cartKey = userId ? `wholesaleCart_${userId}` : 'wholesaleCart';
-      localStorage.removeItem(cartKey);
-      setCart([]);
-      navigate("/retailer");
+      // Create PayU payment request
+      const paymentRes = await api.post(
+        "/payments/create-payment",
+        { items, address, firstName, email, phone },
+        { headers: authHeader() }
+      );
+
+      const { paymentUrl, paymentParams, txnId } = paymentRes.data;
+
+      // Store order details in sessionStorage for verification
+      // Mark as wholesale order
+      sessionStorage.setItem('pendingOrder', JSON.stringify({
+        txnId,
+        items,
+        address,
+        isWholesale: true, // Flag to identify wholesale orders
+      }));
+
+      // Create and submit form to PayU
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = paymentUrl;
+      
+      Object.keys(paymentParams).forEach(key => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = key;
+        input.value = paymentParams[key];
+        form.appendChild(input);
+      });
+
+      document.body.appendChild(form);
+      form.submit();
     } catch (err) {
-      console.error("Purchase error:", err);
-      alert("Failed to complete purchases. Please try again.");
-    } finally {
+      console.error("Checkout error:", err);
+      alert(
+        err.response?.data?.error ||
+          "Failed to initiate payment. Please try again."
+      );
       setLoading(false);
     }
   };
@@ -125,21 +183,66 @@ export default function WholesaleCart() {
         <>
           <h3 style={{ marginTop: 20 }}>Total: ₹{total.toFixed(2)}</h3>
 
+          <div style={{ marginTop: 20, maxWidth: 500 }}>
+            <p style={{ marginBottom: 10 }}>Shipping Address:</p>
+            <AddressAutocomplete
+              value={address}
+              onChange={setAddress}
+              placeholder="Enter shipping address"
+            />
+
+            <div style={{ marginTop: 15 }}>
+              <p style={{ marginBottom: 5 }}>Name: *</p>
+              <input
+                type="text"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder="Your full name"
+                style={{ width: "100%", padding: "8px", marginBottom: 10 }}
+                required
+              />
+            </div>
+
+            <div>
+              <p style={{ marginBottom: 5 }}>Email: *</p>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="your.email@example.com"
+                style={{ width: "100%", padding: "8px", marginBottom: 10 }}
+                required
+              />
+            </div>
+
+            <div>
+              <p style={{ marginBottom: 5 }}>Phone: *</p>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="10-digit mobile number"
+                style={{ width: "100%", padding: "8px", marginBottom: 10 }}
+                required
+              />
+            </div>
+          </div>
+
           <button
-            onClick={handlePurchase}
-            disabled={loading}
+            onClick={handleCheckout}
+            disabled={loading || !address.trim()}
             style={{
               marginTop: 20,
               padding: "12px 24px",
               fontSize: "16px",
-              background: loading ? "#ccc" : "#22c55e",
+              background: loading ? "#ccc" : "#3399cc",
               color: "white",
               border: "none",
               borderRadius: "4px",
               cursor: loading ? "not-allowed" : "pointer",
             }}
           >
-            {loading ? "Processing..." : "Purchase All"}
+            {loading ? "Processing..." : "Proceed to Checkout"}
           </button>
         </>
       )}

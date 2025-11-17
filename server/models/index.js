@@ -27,7 +27,7 @@ Product.belongsTo(User, { foreignKey: 'ownerId', as: 'owner' });
 
 User.hasMany(Review, { foreignKey: 'userId', as: 'reviews' });
 Product.hasMany(Review, { foreignKey: 'productId', as: 'reviews' });
-Review.belongsTo(User, { foreignKey: 'userId' });
-Review.belongsTo(Product, { foreignKey: 'productId' });
+Review.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+Review.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
 
 export { sequelize, User, Product, Order, OrderItem, Review };

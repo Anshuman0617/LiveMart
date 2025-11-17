@@ -53,14 +53,29 @@ export default function PaymentSuccess() {
           // Clear user-specific cart and pending order
           const user = JSON.parse(localStorage.getItem('user') || 'null');
           const userId = user?.id;
-          const cartKey = userId ? `cart_${userId}` : 'cart';
-          localStorage.removeItem(cartKey);
-          sessionStorage.removeItem("pendingOrder");
           
-          // Redirect to home after 3 seconds
-          setTimeout(() => {
-            navigate("/");
-          }, 3000);
+          // Check if this was a wholesale order
+          const isWholesale = pendingOrder.isWholesale;
+          
+          if (isWholesale) {
+            // Clear wholesale cart
+            const wholesaleCartKey = userId ? `wholesaleCart_${userId}` : 'wholesaleCart';
+            localStorage.removeItem(wholesaleCartKey);
+            // Redirect to retailer dashboard after 3 seconds
+            setTimeout(() => {
+              navigate("/retailer");
+            }, 3000);
+          } else {
+            // Clear regular cart
+            const cartKey = userId ? `cart_${userId}` : 'cart';
+            localStorage.removeItem(cartKey);
+            // Redirect to home after 3 seconds
+            setTimeout(() => {
+              navigate("/");
+            }, 3000);
+          }
+          
+          sessionStorage.removeItem("pendingOrder");
         } else {
           setMessage("Payment verification failed. Please contact support.");
         }

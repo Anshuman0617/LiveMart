@@ -235,11 +235,15 @@ export default function Products() {
       <div className="cards">
         {products.length === 0 && <p>No products found.</p>}
 
-        {products.map((p) => (
+        {products.map((p) => {
+          // Get first image (use images array if available, otherwise imageUrl)
+          const firstImage = (p.images && p.images.length > 0) ? p.images[0] : p.imageUrl;
+          
+          return (
           <div className="product-card" key={p.id}>
-            {p.imageUrl && (
+            {firstImage && (
               <img
-                src={`http://localhost:4000${p.imageUrl}`}
+                src={`http://localhost:4000${firstImage}`}
                 alt={p.title}
               />
             )}
@@ -249,7 +253,7 @@ export default function Products() {
             </h3>
 
             <p>{p.description}</p>
-            <p><strong>Price:</strong> ₹{p.price}</p>
+            <p><strong>Price:</strong> ₹{(p.price*(1-p.discount/100)).toFixed(2)}</p>
 
             {p.discount ? (
               <p><strong>Discount:</strong> {p.discount}%</p>
@@ -285,7 +289,8 @@ export default function Products() {
               Add to Cart
             </button>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

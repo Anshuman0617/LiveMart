@@ -160,7 +160,7 @@ export default function Cart() {
       {cart.map((item) => (
         <div className="product-card" key={item.productId}>
           <h3>{item.title}</h3>
-          <p>Price: ₹{item.price}</p>
+          <p>Price: ₹{item.price * item.quantity}</p>
 
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <button onClick={() => decrement(item.productId)}>-</button>

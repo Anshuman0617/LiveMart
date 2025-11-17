@@ -1,15 +1,57 @@
 // client/src/components/Navbar.jsx
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 export default function Navbar() {
-  const user = JSON.parse(localStorage.getItem('user') || 'null');
+  const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user') || 'null'));
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const nav = useNavigate();
+  const location = useLocation();
+
+  // Update user state when location changes (e.g., after login)
+  useEffect(() => {
+    const currentUser = JSON.parse(localStorage.getItem('user') || 'null');
+    console.log('Navbar: User updated from location change:', currentUser);
+    setUser(currentUser);
+  }, [location]);
+
+  // Listen for custom login event and storage changes
+  useEffect(() => {
+    const handleUserChange = () => {
+      const currentUser = JSON.parse(localStorage.getItem('user') || 'null');
+      console.log('Navbar: User updated from event:', currentUser);
+      setUser(currentUser);
+    };
+
+    // Listen for storage events (cross-tab)
+    window.addEventListener('storage', handleUserChange);
+    
+    // Listen for custom login event
+    window.addEventListener('userLogin', handleUserChange);
+    window.addEventListener('userLogout', handleUserChange);
+
+    return () => {
+      window.removeEventListener('storage', handleUserChange);
+      window.removeEventListener('userLogin', handleUserChange);
+      window.removeEventListener('userLogout', handleUserChange);
+    };
+  }, []);
 
   function logout() {
+    // Clear user-specific cart data
+    const userId = user?.id;
+    if (userId) {
+      localStorage.removeItem(`cart_${userId}`);
+      localStorage.removeItem(`wholesaleCart_${userId}`);
+    }
+    // Clear generic cart (for backward compatibility)
+    localStorage.removeItem('cart');
+    localStorage.removeItem('wholesaleCart');
+    
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    // Dispatch event to update Navbar
+    window.dispatchEvent(new Event('userLogout'));
     setShowLogoutModal(false);
     nav('/');
     window.location.reload();
@@ -27,7 +69,19 @@ export default function Navbar() {
         }}
       >
         {/* Brand */}
-        <button className="navbar-brand" onClick={() => nav('/')}>
+        <button 
+          className="navbar-brand" 
+          onClick={() => {
+            // For retailers, go to retailer dashboard; otherwise go to products
+            if (user?.role == 'retailer') {
+              nav('/retailer');
+            }else if (user?.role == 'wholesaler') {
+              nav('/wholesaler');
+            } else {
+              nav('/');
+            }
+          }}
+        >
           LiveMart
         </button>
 
@@ -36,28 +90,40 @@ export default function Navbar() {
           className="navbar-links"
           style={{ display: "flex", gap: 12, alignItems: "center" }}
         >
-          <button className="nav-button" onClick={() => nav('/')}>
-            Products
-          </button>
+          {/* Products - Hidden for retailers */}
+          {user?.role !== 'retailer' && user?.role !== 'wholesaler' && (
+            <button className="nav-button" onClick={() => nav('/')}>
+              Products
+            </button>
+          )}
 
-          {/* Cart should ALWAYS be visible */}
-          <button className="nav-button" onClick={() => nav('/cart')}>
-            Cart
-          </button>
+          {/* Cart - Hidden for retailers */}
+          {user?.role !== 'retailer' && user?.role !== 'wholesaler' && (
+            <button className="nav-button" onClick={() => nav('/cart')}>
+              Cart
+            </button>
+          )}
 
-          {user?.role === 'retailer' && (
+          {/* Wholesale Cart for Retailers */}
+          {user?.role == 'retailer' && (
+            <button className="nav-button" onClick={() => nav('/wholesale-cart')}>
+              Wholesale Cart
+            </button>
+          )}
+
+          {user?.role == 'retailer' && (
             <button className="nav-button" onClick={() => nav('/retailer')}>
               Retailer Dashboard
             </button>
           )}
 
-          {user?.role === 'wholesaler' && (
+          {user?.role == 'wholesaler' && (
             <button className="nav-button" onClick={() => nav('/wholesaler')}>
               Wholesaler Dashboard
             </button>
           )}
 
-          {user?.role === "retailer" && (
+          {user?.role == "retailer" && (
             <button
               className="nav-button"
               onClick={() => nav('/wholesale-products')}

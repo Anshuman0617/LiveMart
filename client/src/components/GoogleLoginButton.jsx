@@ -45,9 +45,11 @@ export default function GoogleLoginButton({ onSuccess }) {
               // Dispatch event to update Navbar
               window.dispatchEvent(new Event('userLogin'));
 
-              // For retailers, reload to ensure Navbar updates properly
-              if (res.data.user.role === 'retailer') {
+              // Redirect based on role
+              if (res.data.user.role == 'retailer') {
                 window.location.href = '/retailer';
+              } else if (res.data.user.role == 'wholesaler') {
+                window.location.href = '/wholesaler';
               } else if (onSuccess) {
                 onSuccess(res.data.user);
               } else {
