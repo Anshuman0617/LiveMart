@@ -1,7 +1,7 @@
 // server/routes/payments.js
 import express from 'express';
 import crypto from 'crypto';
-import { Order, OrderItem, Product } from '../models/index.js';
+import { Order, OrderItem, Product, SellerEarning } from '../models/index.js';
 import { authMiddleware } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -156,6 +156,9 @@ router.post('/verify-payment', authMiddleware, async (req, res) => {
         paymentOrderId: txnid,
       });
 
+      // Platform commission percentage (default 5%, can be configured via env)
+      const platformCommissionPercent = parseFloat(process.env.PLATFORM_COMMISSION_PERCENT || '5.00');
+
       for (const it of items) {
         const product = await Product.findByPk(it.productId);
         if (!product) continue;
@@ -164,12 +167,32 @@ router.post('/verify-payment', authMiddleware, async (req, res) => {
         const subtotal = unitPrice * qty;
         total += subtotal;
         
-        await OrderItem.create({
+        const orderItem = await OrderItem.create({
           orderId: order.id,
           productId: product.id,
           quantity: qty,
           unitPrice,
           subtotal,
+        });
+        
+        // Calculate seller earnings (track how much seller should receive)
+        // Platform takes commission, seller gets the rest
+        const commissionAmount = (subtotal * platformCommissionPercent) / 100;
+        const sellerAmount = subtotal - commissionAmount;
+        
+        // Create seller earning record
+        await SellerEarning.create({
+          sellerId: product.ownerId, // The retailer/wholesaler who owns this product
+          orderId: order.id,
+          orderItemId: orderItem.id,
+          productId: product.id,
+          quantity: qty,
+          unitPrice,
+          subtotal,
+          platformCommission: commissionAmount,
+          commissionPercent: platformCommissionPercent,
+          sellerAmount,
+          status: 'pending', // Payment to seller is pending until manually settled
         });
         
         // Reduce stock

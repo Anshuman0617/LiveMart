@@ -1,6 +1,5 @@
 // client/src/components/ProductForm.jsx
 import React, { useState } from "react";
-import AddressAutocomplete from "./AddressAutocomplete";
 
 export default function ProductForm({
   initial = {},
@@ -14,24 +13,8 @@ export default function ProductForm({
   const [discount, setDiscount] = useState(initial.discount || "");
   const [stock, setStock] = useState(initial.stock || 0);
 
-  const [latLng, setLatLng] = useState({
-    lat: initial.lat || null,
-    lng: initial.lng || null,
-  });
-  const [address, setAddress] = useState(initial.address || "");
-
   const [images, setImages] = useState([]);
   const [existingImages, setExistingImages] = useState(initial.images || []);
-
-  const handlePlaceSelected = (addr, place) => {
-    setAddress(addr);
-    if (place?.geometry?.location) {
-      setLatLng({
-        lat: place.geometry.location.lat(),
-        lng: place.geometry.location.lng(),
-      });
-    }
-  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -42,8 +25,7 @@ export default function ProductForm({
       price,
       discount: allowDiscount ? discount : 0,
       stock,
-      lat: latLng.lat,
-      lng: latLng.lng,
+      // Note: Products now use owner's address, not product-specific address
       images,
     });
   };
@@ -88,12 +70,11 @@ export default function ProductForm({
         type="number"
       />
 
-      <AddressAutocomplete
-        placeholder="Seller address (optional)"
-        value={address}
-        onChange={setAddress}
-        onPlaceSelected={handlePlaceSelected}
-      />
+      <div style={{ marginTop: 10 }}>
+        <p style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
+          ℹ️ Product location will use your profile address. Update it in your profile settings.
+        </p>
+      </div>
 
       <div style={{ marginTop: 10 }}>
         <label>

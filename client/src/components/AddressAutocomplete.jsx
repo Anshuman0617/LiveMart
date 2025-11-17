@@ -34,7 +34,14 @@ export default function AddressAutocomplete({
       value={value}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
-      style={{ width: 300 }}
+      style={{ 
+        width: '100%',
+        padding: '8px 12px',
+        border: '1px solid #ddd',
+        borderRadius: '4px',
+        fontSize: '14px',
+        boxSizing: 'border-box'
+      }}
     />
   );
 }

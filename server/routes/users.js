@@ -33,7 +33,12 @@ async function geocodeAddress(address) {
 // -------------------- Get own profile --------------------
 router.get('/me', authMiddleware, async (req, res) => {
   if (!req.user) return res.status(401).json({ error: "Not logged in" });
-  res.json(req.user);
+  
+  // Fetch full user with all fields including bank info
+  const user = await User.findByPk(req.user.id);
+  if (!user) return res.status(404).json({ error: "User not found" });
+  
+  res.json(user);
 });
 
 // -------------------- Update profile --------------------
@@ -42,7 +47,26 @@ router.put('/me', authMiddleware, async (req, res) => {
     const u = await User.findByPk(req.user.id);
     if (!u) return res.status(404).json({ error: "User not found" });
 
-    const { name, address, lat, lng, picture } = req.body;
+    const { 
+      name, 
+      address, 
+      lat, 
+      lng, 
+      picture,
+      // Bank information (for retailers/wholesalers)
+      bankAccountName,
+      bankAccountNumber,
+      bankIFSC,
+      bankName,
+      upiId,
+      payuMerchantKey
+    } = req.body;
+
+    // Validate: Retailers and wholesalers must have address
+    const isSeller = u.role === 'retailer' || u.role === 'wholesaler';
+    if (isSeller && address !== undefined && !address?.trim()) {
+      return res.status(400).json({ error: "Address is required for retailers and wholesalers" });
+    }
 
     if (name) u.name = name;
 
@@ -69,6 +93,16 @@ router.put('/me', authMiddleware, async (req, res) => {
     }
 
     if (picture !== undefined) u.picture = picture;
+
+    // Update bank information (for sellers)
+    if (isSeller) {
+      if (bankAccountName !== undefined) u.bankAccountName = bankAccountName;
+      if (bankAccountNumber !== undefined) u.bankAccountNumber = bankAccountNumber;
+      if (bankIFSC !== undefined) u.bankIFSC = bankIFSC;
+      if (bankName !== undefined) u.bankName = bankName;
+      if (upiId !== undefined) u.upiId = upiId;
+      if (payuMerchantKey !== undefined) u.payuMerchantKey = payuMerchantKey;
+    }
 
     await u.save();
     res.json(u);

@@ -115,9 +115,18 @@ if (q) {
 
 
     // ---------- DISTANCES USING GOOGLE ----------
+    // Use owner's lat/lng instead of product's lat/lng
     if (lat && lng) {
-      const withCoords = data.filter(p => p.lat && p.lng);
-      const distances = await getDrivingDistances(lat, lng, withCoords);
+      const withCoords = data.filter(p => p.owner?.lat && p.owner?.lng);
+      const distances = await getDrivingDistances(
+        lat, 
+        lng, 
+        withCoords.map(p => ({
+          id: p.id,
+          lat: p.owner.lat,
+          lng: p.owner.lng
+        }))
+      );
 
       const map = new Map(distances.map(d => [d.id, d.distanceMeters]));
 
@@ -173,13 +182,21 @@ router.post(
   upload.array('images', 6),
   async (req, res) => {
     try {
-      const { title, description, price, stock, lat, lng } = req.body;
+      const { title, description, price, stock } = req.body;
+
+      // Validate: Sellers must have address
+      if (!req.user.address || !req.user.lat || !req.user.lng) {
+        return res.status(400).json({ 
+          error: "Please set your address in profile settings first. Address is required for retailers and wholesalers." 
+        });
+      }
 
       const images = req.files?.map(f => `/uploads/${f.filename}`) || [];
       const imageUrl = images[0] || null;
 
       const ownerType = req.user.role === 'retailer' ? 'retailer' : 'wholesaler';
 
+      // Products use owner's address, not their own lat/lng
       const product = await Product.create({
         title,
         description,
@@ -188,9 +205,8 @@ router.post(
         images,
         imageUrl,
         ownerId: req.user.id,
-        ownerType,
-        lat: lat ? parseFloat(lat) : req.user.lat,
-        lng: lng ? parseFloat(lng) : req.user.lng
+        ownerType
+        // Note: lat/lng removed - products now use owner's address
       });
 
       res.json(product);
@@ -230,8 +246,9 @@ router.put(
         if (!p.imageUrl) payload.imageUrl = newImgs[0];
       }
 
-      if (payload.lat) payload.lat = parseFloat(payload.lat);
-      if (payload.lng) payload.lng = parseFloat(payload.lng);
+      // Remove lat/lng from payload - products use owner's address
+      delete payload.lat;
+      delete payload.lng;
 
       await p.update(payload);
       res.json(p);

@@ -1,10 +1,10 @@
 // client/src/components/Navbar.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import ProfileMenu from './ProfileMenu';
 
 export default function Navbar() {
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('user') || 'null'));
-  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const nav = useNavigate();
   const location = useLocation();
 
@@ -37,25 +37,6 @@ export default function Navbar() {
     };
   }, []);
 
-  function logout() {
-    // Clear user-specific cart data
-    const userId = user?.id;
-    if (userId) {
-      localStorage.removeItem(`cart_${userId}`);
-      localStorage.removeItem(`wholesaleCart_${userId}`);
-    }
-    // Clear generic cart (for backward compatibility)
-    localStorage.removeItem('cart');
-    localStorage.removeItem('wholesaleCart');
-    
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    // Dispatch event to update Navbar
-    window.dispatchEvent(new Event('userLogout'));
-    setShowLogoutModal(false);
-    nav('/');
-    window.location.reload();
-  }
 
   return (
     <nav className="navbar" style={{ marginBottom: 20 }}>
@@ -146,59 +127,17 @@ export default function Navbar() {
               Login
             </button>
           ) : (
-            <>
-              <span className="nav-user-name" style={{ fontWeight: 600 }}>
-                {user.name || user.email}
-              </span>
-              <button
-                className="nav-button nav-button-logout"
-                onClick={() => setShowLogoutModal(true)}
-              >
-                Logout
-              </button>
-            </>
+            <ProfileMenu
+              user={user}
+              onUserUpdate={(updatedUser) => {
+                setUser(updatedUser);
+                localStorage.setItem('user', JSON.stringify(updatedUser));
+              }}
+            />
           )}
         </div>
       </div>
 
-      {/* Logout modal */}
-      {showLogoutModal && (
-        <div
-          className="modal-overlay"
-          onClick={() => setShowLogoutModal(false)}
-          style={{
-            position: "fixed",
-            top: 0, left: 0, width: "100%", height: "100%",
-            background: "rgba(0,0,0,0.4)",
-            display: "flex", justifyContent: "center", alignItems: "center"
-          }}
-        >
-          <div
-            className="modal-content"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: "#fff",
-              padding: 20,
-              borderRadius: 10,
-              width: 320
-            }}
-          >
-            <h3>Confirm Logout</h3>
-            <p>Are you sure you want to logout?</p>
-            <div
-              className="modal-actions"
-              style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}
-            >
-              <button onClick={() => setShowLogoutModal(false)} className="secondary">
-                Cancel
-              </button>
-              <button onClick={logout} className="danger">
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </nav>
   );
 }
