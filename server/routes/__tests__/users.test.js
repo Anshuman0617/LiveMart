@@ -38,6 +38,16 @@ describe('Users Routes', () => {
 
   describe('GET /users/me', () => {
     it('returns user profile when authenticated', async () => {
+      const mockUser = {
+        id: 1,
+        name: 'Test User',
+        email: 'test@example.com',
+        role: 'customer'
+      };
+
+      const { User } = await import('../../models/index.js');
+      User.findByPk.mockResolvedValue(mockUser);
+
       const response = await request(app)
         .get('/users/me');
       
@@ -45,6 +55,7 @@ describe('Users Routes', () => {
 
       expect(response.body).toHaveProperty('id', 1);
       expect(response.body).toHaveProperty('name', 'Test User');
+      expect(User.findByPk).toHaveBeenCalledWith(1);
     });
   });
 

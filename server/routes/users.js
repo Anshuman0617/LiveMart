@@ -50,6 +50,7 @@ router.put('/me', authMiddleware, async (req, res) => {
     const { 
       name, 
       address, 
+      phone,
       lat, 
       lng, 
       picture,
@@ -70,18 +71,14 @@ router.put('/me', authMiddleware, async (req, res) => {
 
     if (name) u.name = name;
 
-    // If user sends explicit lat/lng → use that
-    if (lat !== undefined && lng !== undefined) {
-      u.lat = lat;
-      u.lng = lng;
-    }
+    if (phone !== undefined) u.phone = phone;
 
-    // If user sends address → save it and auto-geocode
+    // If user sends address → save it and auto-geocode (this overrides lat/lng)
     if (address !== undefined) {
       u.address = address;
 
-      // Only geocode when user sends a NEW address OR lat/lng missing
-      if (address && !(lat && lng)) {
+      // Always geocode when address is provided (address takes precedence over lat/lng)
+      if (address && address.trim()) {
         const geo = await geocodeAddress(address);
         if (geo) {
           u.lat = geo.lat;
@@ -90,6 +87,10 @@ router.put('/me', authMiddleware, async (req, res) => {
           console.warn("❗ Geocoding failed. Address saved without coordinates.");
         }
       }
+    } else if (lat !== undefined && lng !== undefined) {
+      // Only set lat/lng if address is not being updated (for "Use my location" button)
+      u.lat = lat;
+      u.lng = lng;
     }
 
     if (picture !== undefined) u.picture = picture;

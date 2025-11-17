@@ -5,79 +5,171 @@ import AddressAutocomplete from './AddressAutocomplete';
 
 export default function ProfileSettings({ user, onClose, onSave }) {
   const [loading, setLoading] = useState(false);
-  const [address, setAddress] = useState(user?.address || '');
-  const [latLng, setLatLng] = useState(
-    user?.lat && user?.lng ? { lat: user.lat, lng: user.lng } : null
-  );
   const [saving, setSaving] = useState(false);
+  const [userData, setUserData] = useState(user);
 
-  // Bank information (for retailers/wholesalers)
-  const [bankAccountName, setBankAccountName] = useState(user?.bankAccountName || '');
-  const [bankAccountNumber, setBankAccountNumber] = useState(user?.bankAccountNumber || '');
-  const [bankIFSC, setBankIFSC] = useState(user?.bankIFSC || '');
-  const [bankName, setBankName] = useState(user?.bankName || '');
-  const [upiId, setUpiId] = useState(user?.upiId || '');
-  const [payuMerchantKey, setPayuMerchantKey] = useState(user?.payuMerchantKey || '');
-
-  const isSeller = user?.role === 'retailer' || user?.role === 'wholesaler';
-
-  const handlePlaceSelected = async (selectedAddress, place) => {
-    if (place?.geometry?.location) {
-      const newLatLng = {
-        lat: place.geometry.location.lat(),
-        lng: place.geometry.location.lng(),
+  // Parse existing address into components
+  const parseAddress = (addr) => {
+    if (!addr) return { houseFlat: '', locality: '', cityPin: '' };
+    // Try to split by common delimiters
+    const parts = addr.split(',').map(p => p.trim());
+    if (parts.length >= 3) {
+      return {
+        houseFlat: parts[0],
+        locality: parts[1],
+        cityPin: parts.slice(2).join(', ')
       };
-      setLatLng(newLatLng);
-      setAddress(selectedAddress);
+    }
+    // If not comma-separated, try to guess
+    return { houseFlat: '', locality: '', cityPin: addr };
+  };
+
+  // Initialize state with empty values (will be populated after fetch)
+  const [houseFlat, setHouseFlat] = useState('');
+  const [locality, setLocality] = useState('');
+  const [cityPin, setCityPin] = useState('');
+  const [phone, setPhone] = useState('');
+  
+  // Bank information (for retailers and wholesalers)
+  const isSeller = userData?.role === 'retailer' || userData?.role === 'wholesaler';
+  // Single address field for sellers
+  const [address, setAddress] = useState('');
+  const [bankAccountName, setBankAccountName] = useState('');
+  const [bankAccountNumber, setBankAccountNumber] = useState('');
+  const [bankIFSC, setBankIFSC] = useState('');
+  const [bankName, setBankName] = useState('');
+  const [upiId, setUpiId] = useState('');
+  const [payuMerchantKey, setPayuMerchantKey] = useState('');
+
+  // Fetch full user data when component mounts
+  useEffect(() => {
+    const fetchUserData = async () => {
+      setLoading(true);
+      try {
+        const res = await api.get('/users/me', { headers: authHeader() });
+        setUserData(res.data);
+      } catch (err) {
+        console.error('Failed to fetch user data:', err);
+        // Fallback to prop user if fetch fails
+        setUserData(user);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchUserData();
+  }, [user]);
+
+  // Update fields when userData changes
+  useEffect(() => {
+    if (!userData) return;
+    
+    if (isSeller) {
+      // For sellers, use single address field
+      setAddress(userData.address || '');
+      // Update bank information for sellers
+      setBankAccountName(userData.bankAccountName || '');
+      setBankAccountNumber(userData.bankAccountNumber || '');
+      setBankIFSC(userData.bankIFSC || '');
+      setBankName(userData.bankName || '');
+      setUpiId(userData.upiId || '');
+      setPayuMerchantKey(userData.payuMerchantKey || '');
+    } else {
+      // For regular users, use three separate fields
+      const parsed = parseAddress(userData.address || '');
+      setHouseFlat(parsed.houseFlat);
+      setLocality(parsed.locality);
+      setCityPin(parsed.cityPin);
+    }
+    setPhone(userData.phone || '');
+  }, [userData, isSeller]);
+
+  // Handle address autocomplete selection
+  const handlePlaceSelected = (selectedAddress, place) => {
+    if (!place) return;
+
+    if (isSeller) {
+      // For sellers, use the formatted address directly
+      setAddress(selectedAddress || place.formatted_address || '');
+    } else {
+      // For regular users, parse into three fields
+      const addressComponents = place.address_components || [];
+      
+      // Extract components
+      let streetNumber = '';
+      let route = '';
+      let sublocality = '';
+      let locality = '';
+      let city = '';
+      let state = '';
+      let postalCode = '';
+
+      addressComponents.forEach(component => {
+        const types = component.types;
+        if (types.includes('street_number')) {
+          streetNumber = component.long_name;
+        } else if (types.includes('route')) {
+          route = component.long_name;
+        } else if (types.includes('sublocality') || types.includes('sublocality_level_1')) {
+          sublocality = component.long_name;
+        } else if (types.includes('locality')) {
+          locality = component.long_name;
+        } else if (types.includes('administrative_area_level_1')) {
+          state = component.long_name;
+        } else if (types.includes('postal_code')) {
+          postalCode = component.long_name;
+        } else if (types.includes('administrative_area_level_2')) {
+          city = component.long_name;
+        }
+      });
+
+      // Build address fields
+      const houseFlatValue = [streetNumber, route].filter(Boolean).join(' ');
+      const localityValue = sublocality || locality || '';
+      const cityPinValue = [city || locality, state, postalCode].filter(Boolean).join(', ');
+
+      setHouseFlat(houseFlatValue);
+      setLocality(localityValue);
+      setCityPin(cityPinValue);
     }
   };
 
   const handleSave = async () => {
-    // Validate: Sellers must have address
-    if (isSeller && !address.trim()) {
-      alert('Address is required for retailers and wholesalers');
+    // Validate: All users must have address and phone
+    let fullAddress = '';
+    if (isSeller) {
+      fullAddress = address.trim();
+    } else {
+      fullAddress = [houseFlat, locality, cityPin].filter(Boolean).join(', ');
+    }
+    
+    if (!fullAddress) {
+      alert('Please enter your complete address');
+      return;
+    }
+
+    if (!phone.trim()) {
+      alert('Please enter your phone number');
       return;
     }
 
     setSaving(true);
     try {
       const payload = {
-        address: address || undefined,
+        address: fullAddress,
+        phone: phone.trim(),
       };
 
-      // Include lat/lng if we have them
-      if (latLng) {
-        payload.lat = latLng.lat;
-        payload.lng = latLng.lng;
-      }
-
-      // Include bank info for sellers
+      // Add bank information for sellers
       if (isSeller) {
-        payload.bankAccountName = bankAccountName || undefined;
-        payload.bankAccountNumber = bankAccountNumber || undefined;
-        payload.bankIFSC = bankIFSC || undefined;
-        payload.bankName = bankName || undefined;
-        payload.upiId = upiId || undefined;
-        payload.payuMerchantKey = payuMerchantKey || undefined;
+        payload.bankAccountName = bankAccountName.trim();
+        payload.bankAccountNumber = bankAccountNumber.trim();
+        payload.bankIFSC = bankIFSC.trim();
+        payload.bankName = bankName.trim();
+        payload.upiId = upiId.trim();
+        payload.payuMerchantKey = payuMerchantKey.trim();
       }
 
       const res = await api.put('/users/me', payload, { headers: authHeader() });
-      
-      // Also update bank info via earnings endpoint if seller
-      if (isSeller) {
-        await api.put(
-          '/earnings/payment-info',
-          {
-            bankAccountName: bankAccountName || undefined,
-            bankAccountNumber: bankAccountNumber || undefined,
-            bankIFSC: bankIFSC || undefined,
-            bankName: bankName || undefined,
-            upiId: upiId || undefined,
-            payuMerchantKey: payuMerchantKey || undefined,
-          },
-          { headers: authHeader() }
-        );
-      }
 
       const updatedUser = res.data;
       
@@ -142,54 +234,173 @@ export default function ProfileSettings({ user, onClose, onSave }) {
           </button>
         </div>
 
+        {loading && (
+          <div style={{ textAlign: 'center', padding: '20px' }}>
+            <p>Loading profile data...</p>
+          </div>
+        )}
+
+        {!loading && (
+          <>
         {/* Address Section */}
         <div style={{ marginBottom: '24px' }}>
           <h3 style={{ marginBottom: '12px', fontSize: '16px', fontWeight: 600 }}>
-            Address {isSeller && <span style={{ color: 'red' }}>*</span>}
+            Address <span style={{ color: 'red' }}>*</span>
           </h3>
-          <AddressAutocomplete
-            value={address}
-            onChange={setAddress}
-            onPlaceSelected={handlePlaceSelected}
-            placeholder="Enter your address"
-          />
-          {isSeller && !address.trim() && (
-            <p style={{ color: 'red', fontSize: '12px', marginTop: '4px' }}>
-              Address is required for {user?.role === 'retailer' ? 'retailers' : 'wholesalers'}
-            </p>
-          )}
-          {latLng && (
-            <p style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-              Location: {latLng.lat.toFixed(6)}, {latLng.lng.toFixed(6)}
-            </p>
+          
+          {isSeller ? (
+            // Single address field for sellers
+            <>
+              {/* Address Autocomplete */}
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>
+                  Search Address (Auto-fill below)
+                </label>
+                <AddressAutocomplete
+                  placeholder="Search and select your address..."
+                  value=""
+                  onPlaceSelected={handlePlaceSelected}
+                />
+                <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#666' }}>
+                  Search for your address to auto-fill, or enter manually
+                </p>
+              </div>
+
+              <input
+                type="text"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="Enter your complete address"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '6px',
+                  fontSize: '14px'
+                }}
+              />
+            </>
+          ) : (
+            // Three separate fields for regular users
+            <>
+              {/* Address Autocomplete */}
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>
+                  Search Address (Auto-fill fields below)
+                </label>
+                <AddressAutocomplete
+                  placeholder="Search and select your address..."
+                  value=""
+                  onPlaceSelected={handlePlaceSelected}
+                />
+                <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#666' }}>
+                  Search for your address to auto-fill the fields below, or enter manually
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>
+                    House/Flat Number
+                  </label>
+                  <input
+                    type="text"
+                    value={houseFlat}
+                    onChange={(e) => setHouseFlat(e.target.value)}
+                    placeholder="House/Flat number"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>
+                    Locality/Area
+                  </label>
+                  <input
+                    type="text"
+                    value={locality}
+                    onChange={(e) => setLocality(e.target.value)}
+                    placeholder="Locality or area"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>
+                    City and Pin Code
+                  </label>
+                  <input
+                    type="text"
+                    value={cityPin}
+                    onChange={(e) => setCityPin(e.target.value)}
+                    placeholder="City, State - Pin Code"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+              </div>
+            </>
           )}
         </div>
 
-        {/* Bank Information Section (Sellers only) */}
-        {isSeller && (
-          <div style={{ marginBottom: '24px', paddingTop: '24px', borderTop: '1px solid #e0e0e0' }}>
-            <h3 style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 600 }}>
-              Payment Account Information
-            </h3>
-            <p style={{ fontSize: '12px', color: '#666', marginBottom: '16px' }}>
-              Enter your bank details to receive payments from sales
-            </p>
+        {/* Phone Number Section */}
+        <div style={{ marginBottom: '24px' }}>
+          <h3 style={{ marginBottom: '12px', fontSize: '16px', fontWeight: 600 }}>
+            Phone Number <span style={{ color: 'red' }}>*</span>
+          </h3>
+          <input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="10-digit mobile number"
+            style={{
+              width: '100%',
+              padding: '10px 12px',
+              border: '1px solid #ddd',
+              borderRadius: '6px',
+              fontSize: '14px'
+            }}
+          />
+        </div>
 
+        {/* Bank Information Section (for retailers and wholesalers only) */}
+        {isSeller && (
+          <div style={{ marginBottom: '24px' }}>
+            <h3 style={{ marginBottom: '12px', fontSize: '16px', fontWeight: 600 }}>
+              Payment Information
+            </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
                 <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>
-                  Account Holder Name
+                  Bank Account Name
                 </label>
                 <input
                   type="text"
                   value={bankAccountName}
                   onChange={(e) => setBankAccountName(e.target.value)}
-                  placeholder="Name as per bank account"
+                  placeholder="Account holder name"
                   style={{
                     width: '100%',
-                    padding: '8px 12px',
+                    padding: '10px 12px',
                     border: '1px solid #ddd',
-                    borderRadius: '4px',
+                    borderRadius: '6px',
                     fontSize: '14px'
                   }}
                 />
@@ -197,18 +408,18 @@ export default function ProfileSettings({ user, onClose, onSave }) {
 
               <div>
                 <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>
-                  Account Number
+                  Bank Account Number
                 </label>
                 <input
                   type="text"
                   value={bankAccountNumber}
                   onChange={(e) => setBankAccountNumber(e.target.value)}
-                  placeholder="Bank account number"
+                  placeholder="Account number"
                   style={{
                     width: '100%',
-                    padding: '8px 12px',
+                    padding: '10px 12px',
                     border: '1px solid #ddd',
-                    borderRadius: '4px',
+                    borderRadius: '6px',
                     fontSize: '14px'
                   }}
                 />
@@ -216,18 +427,18 @@ export default function ProfileSettings({ user, onClose, onSave }) {
 
               <div>
                 <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>
-                  IFSC Code
+                  Bank IFSC Code
                 </label>
                 <input
                   type="text"
                   value={bankIFSC}
-                  onChange={(e) => setBankIFSC(e.target.value.toUpperCase())}
+                  onChange={(e) => setBankIFSC(e.target.value)}
                   placeholder="IFSC code"
                   style={{
                     width: '100%',
-                    padding: '8px 12px',
+                    padding: '10px 12px',
                     border: '1px solid #ddd',
-                    borderRadius: '4px',
+                    borderRadius: '6px',
                     fontSize: '14px'
                   }}
                 />
@@ -244,9 +455,9 @@ export default function ProfileSettings({ user, onClose, onSave }) {
                   placeholder="Bank name"
                   style={{
                     width: '100%',
-                    padding: '8px 12px',
+                    padding: '10px 12px',
                     border: '1px solid #ddd',
-                    borderRadius: '4px',
+                    borderRadius: '6px',
                     fontSize: '14px'
                   }}
                 />
@@ -254,7 +465,7 @@ export default function ProfileSettings({ user, onClose, onSave }) {
 
               <div>
                 <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>
-                  UPI ID (Optional)
+                  UPI ID
                 </label>
                 <input
                   type="text"
@@ -263,9 +474,9 @@ export default function ProfileSettings({ user, onClose, onSave }) {
                   placeholder="yourname@upi"
                   style={{
                     width: '100%',
-                    padding: '8px 12px',
+                    padding: '10px 12px',
                     border: '1px solid #ddd',
-                    borderRadius: '4px',
+                    borderRadius: '6px',
                     fontSize: '14px'
                   }}
                 />
@@ -282,9 +493,9 @@ export default function ProfileSettings({ user, onClose, onSave }) {
                   placeholder="If you have your own PayU account"
                   style={{
                     width: '100%',
-                    padding: '8px 12px',
+                    padding: '10px 12px',
                     border: '1px solid #ddd',
-                    borderRadius: '4px',
+                    borderRadius: '6px',
                     fontSize: '14px'
                   }}
                 />
@@ -326,6 +537,8 @@ export default function ProfileSettings({ user, onClose, onSave }) {
             {saving ? 'Saving...' : 'Save'}
           </button>
         </div>
+        </>
+        )}
       </div>
     </div>
   );

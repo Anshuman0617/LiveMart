@@ -7,10 +7,10 @@ import { useNavigate, Link } from "react-router-dom";
 export default function Cart() {
   const [cart, setCart] = useState([]);
   const [cartItems, setCartItems] = useState([]); // Cart items with full product details
-  const [address, setAddress] = useState("");
+  const [userAddress, setUserAddress] = useState("");
+  const [userPhone, setUserPhone] = useState("");
   const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const navigate = useNavigate();
@@ -69,16 +69,16 @@ export default function Cart() {
         const res = await api.get("/users/me");
         const user = res.data;
         if (user.address) {
-          setAddress(user.address);
+          setUserAddress(user.address);
+        }
+        if (user.phone) {
+          setUserPhone(user.phone);
         }
         if (user.name) {
           setFirstName(user.name);
         }
         if (user.email) {
           setEmail(user.email);
-        }
-        if (user.phone) {
-          setPhone(user.phone);
         }
       } catch (err) {
         // User not logged in or error - that's okay
@@ -148,6 +148,14 @@ export default function Cart() {
     const c = [...cart];
     const item = c.find((i) => i.productId === id);
     if (item) {
+      const cartItem = cartItems.find(ci => ci.productId === id);
+      const maxQuantity = Math.min(10, cartItem?.product?.stock || 10);
+      
+      if (item.quantity >= maxQuantity) {
+        alert(`Maximum ${maxQuantity} items allowed for this product.`);
+        return;
+      }
+      
       item.quantity++;
       updateCart(c, true); // Skip reload to prevent flashing
     }
@@ -188,21 +196,27 @@ export default function Cart() {
       return;
     }
 
-    if (!address.trim()) {
-      alert("Please enter a shipping address");
-      return;
-    }
-
-    if (!firstName.trim() || !email.trim() || !phone.trim()) {
-      alert("Please fill in all required details (Name, Email, Phone)");
-      return;
-    }
-
     // Check if user is logged in
     const token = localStorage.getItem("token");
     if (!token) {
       alert("Please log in to proceed with checkout");
       navigate("/login");
+      return;
+    }
+
+    // Validate address and phone from profile
+    if (!userAddress.trim()) {
+      alert("Please set your address in profile settings before checkout");
+      return;
+    }
+
+    if (!userPhone.trim()) {
+      alert("Please set your phone number in profile settings before checkout");
+      return;
+    }
+
+    if (!firstName.trim() || !email.trim()) {
+      alert("Please fill in all required details (Name, Email)");
       return;
     }
 
@@ -218,7 +232,7 @@ export default function Cart() {
       // Create PayU payment request
       const paymentRes = await api.post(
         "/payments/create-payment",
-        { items, address, firstName, email, phone },
+        { items, address: userAddress, firstName, email, phone: userPhone },
         { headers: authHeader() }
       );
 
@@ -228,7 +242,7 @@ export default function Cart() {
       sessionStorage.setItem('pendingOrder', JSON.stringify({
         txnId,
         items,
-        address,
+        address: userAddress,
       }));
 
       // Create and submit form to PayU
@@ -507,12 +521,47 @@ export default function Cart() {
           </div>
 
           <div style={{ marginTop: 20, maxWidth: 500 }}>
-            <p style={{ marginBottom: 10 }}>Shipping Address:</p>
-            <AddressAutocomplete
-              value={address}
-              onChange={setAddress}
-              placeholder="Enter shipping address"
-            />
+            <h3 style={{ marginBottom: "16px" }}>Shipping Information</h3>
+            
+            <div style={{ 
+              marginBottom: "20px",
+              padding: "16px",
+              backgroundColor: "#f9fafb",
+              borderRadius: "8px",
+              border: "1px solid #e5e7eb"
+            }}>
+              <div style={{ marginBottom: "12px" }}>
+                <p style={{ margin: 0, fontSize: "12px", color: "#6b7280", fontWeight: 600, marginBottom: "4px" }}>
+                  Shipping Address:
+                </p>
+                <p style={{ margin: 0, fontSize: "14px", color: "#111827" }}>
+                  {userAddress || <span style={{ color: "#dc2626" }}>Not set. Please set in profile settings.</span>}
+                </p>
+              </div>
+
+              <div>
+                <p style={{ margin: 0, fontSize: "12px", color: "#6b7280", fontWeight: 600, marginBottom: "4px" }}>
+                  Phone Number:
+                </p>
+                <p style={{ margin: 0, fontSize: "14px", color: "#111827" }}>
+                  {userPhone || <span style={{ color: "#dc2626" }}>Not set. Please set in profile settings.</span>}
+                </p>
+              </div>
+
+              {(!userAddress || !userPhone) && (
+                <div style={{ 
+                  marginTop: "12px",
+                  padding: "8px 12px",
+                  backgroundColor: "#fef2f2",
+                  borderRadius: "6px",
+                  border: "1px solid #fecaca"
+                }}>
+                  <p style={{ margin: 0, fontSize: "12px", color: "#991b1b" }}>
+                    ⚠️ Please set your address and phone number in profile settings to proceed with checkout.
+                  </p>
+                </div>
+              )}
+            </div>
 
             <div style={{ marginTop: 15 }}>
               <p style={{ marginBottom: 5 }}>Name: *</p>
@@ -537,23 +586,11 @@ export default function Cart() {
                 required
               />
             </div>
-
-            <div>
-              <p style={{ marginBottom: 5 }}>Phone: *</p>
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="10-digit mobile number"
-                style={{ width: "100%", padding: "8px", marginBottom: 10 }}
-                required
-              />
-            </div>
           </div>
 
           <button
             onClick={handleCheckout}
-            disabled={loading || !address.trim()}
+            disabled={loading || !userAddress.trim() || !userPhone.trim()}
             style={{
               marginTop: 20,
               padding: "12px 24px",

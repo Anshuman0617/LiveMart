@@ -256,3 +256,206 @@ button.danger { background: #dc2626; }
   .App { padding: 12px; margin: 12px; }
   .product-card img { height: 120px; }
 }
+
+/* Login Page Styles */
+.login-page-container {
+  min-height: calc(100vh - 100px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: #ffffff;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 450px;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.login-header h2 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 8px;
+}
+
+.login-header p {
+  margin: 0;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.login-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.login-form-group label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.login-input {
+  width: 100%;
+  padding: 14px 16px;
+  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+  outline: none;
+  font-size: 15px;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.login-input:focus {
+  border-color: #3399cc;
+}
+
+.login-select {
+  width: 100%;
+  padding: 14px 16px;
+  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+  outline: none;
+  font-size: 15px;
+  background: #ffffff;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.login-select:focus {
+  border-color: #3399cc;
+}
+
+.login-buttons {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.login-button {
+  flex: 1;
+  padding: 14px 24px;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.login-button-primary {
+  background: #3399cc;
+}
+
+.login-button-primary:hover {
+  background: #2a7ba0;
+  transform: translateY(-1px);
+}
+
+.login-button-register {
+  background: #10b981;
+}
+
+.login-button-register:hover {
+  background: #059669;
+  transform: translateY(-1px);
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.login-divider-line {
+  flex: 1;
+  height: 1px;
+  background: #e5e7eb;
+}
+
+.login-divider-text {
+  font-size: 14px;
+  color: #9ca3af;
+  font-weight: 500;
+}
+
+.login-register-link {
+  color: #87ceeb;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.login-register-link:hover {
+  color: #5fb3d3;
+  text-decoration: underline;
+}
+
+.login-switch-text {
+  text-align: center;
+  font-size: 14px;
+  color: #6b7280;
+  margin-top: 8px;
+}
+
+@media (max-width: 640px) {
+  .login-card {
+    padding: 24px;
+  }
+  
+  .login-header h2 {
+    font-size: 24px;
+  }
+}
+
+/* Google Login Button Styling */
+.login-button-google {
+  width: 100% !important;
+  background: #ffffff !important;
+  color: #3c4043 !important;
+  border: 2px solid #dadce0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+}
+
+.login-button-google:hover {
+  background: #f8f9fa !important;
+  border-color: #dadce0 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+.login-button-google:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

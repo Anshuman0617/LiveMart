@@ -64,7 +64,13 @@ export default function ProductDetail() {
     const cart = JSON.parse(localStorage.getItem(cartKey) || "[]");
     const existing = cart.find((c) => c.productId === p.id);
 
+    const maxQuantity = Math.min(10, p.stock || 10);
+
     if (existing) {
+      if (existing.quantity >= maxQuantity) {
+        alert(`Maximum ${maxQuantity} items allowed for this product.`);
+        return;
+      }
       existing.quantity++;
     } else {
       cart.push({

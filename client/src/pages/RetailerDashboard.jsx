@@ -114,6 +114,10 @@ export default function RetailerDashboard() {
           onSubmit={(data) => updateProduct(editing.id, data)}
           initial={editing}
           allowDiscount
+          onProductUpdate={(updatedProduct) => {
+            setEditing(updatedProduct);
+            fetchProducts();
+          }}
         />
       )}
 

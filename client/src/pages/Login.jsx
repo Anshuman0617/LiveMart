@@ -11,6 +11,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("customer");
   const [name, setName] = useState("");
+  const [showRegister, setShowRegister] = useState(false);
 
   async function handleLogin() {
     try {
@@ -67,44 +68,117 @@ export default function Login() {
   }
 
   return (
-    <div className="App">
-      <h2>Login / Register</h2>
+    <div className="login-page-container">
+      <div className="login-card">
+        <div className="login-header">
+          <h2>Welcome to LiveMart</h2>
+          <p>Login or create a new account</p>
+        </div>
 
-      <input
-        placeholder="Name (for registration)"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
+        <div className="login-form">
+          {/* Email and Password at the top */}
+          <input
+            className="login-input"
+            placeholder="Email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
 
-      <input
-        placeholder="Email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-      />
+          <input
+            className="login-input"
+            placeholder="Password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
 
-      <input
-        placeholder="Password"
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-      />
+          {/* Register fields - only show when showRegister is true */}
+          {showRegister && (
+            <>
+              <input
+                className="login-input"
+                placeholder="Name (for registration)"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
 
-      <label>Register as:</label>
-      <select value={role} onChange={(e) => setRole(e.target.value)}>
-        <option value="customer">User</option>
-        <option value="retailer">Retailer</option>
-        <option value="wholesaler">Wholesaler</option>
-      </select>
+              <div className="login-form-group">
+                <label>Register as:</label>
+                <select
+                  className="login-select"
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                >
+                  <option value="customer">User</option>
+                  <option value="retailer">Retailer</option>
+                  <option value="wholesaler">Wholesaler</option>
+                </select>
+              </div>
+            </>
+          )}
+        </div>
 
-      <div style={{ marginTop: 14 }}>
-        <button onClick={handleLogin}>Login</button>
-        <button onClick={handleRegister} style={{ marginLeft: 8 }}>
-          Register
-        </button>
-      </div>
+        <div className="login-buttons">
+          {!showRegister && (
+            <button
+              className="login-button login-button-primary"
+              onClick={handleLogin}
+            >
+              Login
+            </button>
+          )}
+          {showRegister && (
+            <button
+              className="login-button login-button-register"
+              onClick={handleRegister}
+            >
+              Register
+            </button>
+          )}
+        </div>
 
-      <div style={{ marginTop: 24 }}>
-        <GoogleLoginButton onSuccess={handleGoogleSuccess} />
+        {!showRegister && (
+          <>
+            <div className="login-switch-text">
+              Don't have an account?{' '}
+              <a
+                className="login-register-link"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setShowRegister(true);
+                }}
+              >
+                Register
+              </a>
+            </div>
+
+            <div className="login-divider">
+              <div className="login-divider-line"></div>
+              <span className="login-divider-text">OR</span>
+              <div className="login-divider-line"></div>
+            </div>
+
+            <div>
+              <GoogleLoginButton onSuccess={handleGoogleSuccess} />
+            </div>
+          </>
+        )}
+
+        {showRegister && (
+          <div className="login-switch-text">
+            Already have an account?{' '}
+            <a
+              className="login-register-link"
+              onClick={(e) => {
+                e.preventDefault();
+                setShowRegister(false);
+              }}
+            >
+              Login
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );

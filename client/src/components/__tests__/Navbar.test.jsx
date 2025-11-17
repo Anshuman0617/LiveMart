@@ -54,8 +54,14 @@ describe('Navbar', () => {
     );
 
     expect(screen.getByText('Test User')).toBeInTheDocument();
-    expect(screen.getAllByText('Logout').length).toBeGreaterThan(0);
     expect(screen.queryByText('Login')).not.toBeInTheDocument();
+    
+    // Click username button to open menu
+    const usernameButton = screen.getByText('Test User').closest('button');
+    fireEvent.click(usernameButton);
+    
+    // Now logout button should be visible
+    expect(screen.getByText(/Logout/i)).toBeInTheDocument();
   });
 
   it('shows retailer dashboard button for retailer users', () => {
@@ -99,7 +105,7 @@ describe('Navbar', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/');
   });
 
-  it('shows logout modal when logout button is clicked', () => {
+  it('opens profile menu when username button is clicked', () => {
     const mockUser = { id: 1, name: 'Test User', role: 'retailer' };
     localStorage.setItem('user', JSON.stringify(mockUser));
     localStorage.setItem('token', 'test-token');
@@ -110,19 +116,20 @@ describe('Navbar', () => {
       </BrowserRouter>
     );
 
-    // Get the navbar logout button (first one)
-    const logoutButtons = screen.getAllByText('Logout');
-    const navbarLogoutButton = logoutButtons[0];
-    fireEvent.click(navbarLogoutButton);
+    // Click username button to open menu
+    const usernameButton = screen.getByText('Test User').closest('button');
+    fireEvent.click(usernameButton);
 
-    expect(screen.getByText('Confirm Logout')).toBeInTheDocument();
-    expect(screen.getByText('Are you sure you want to logout?')).toBeInTheDocument();
+    // Menu should show Settings and Logout options
+    expect(screen.getByText(/Settings/i)).toBeInTheDocument();
+    expect(screen.getByText(/Logout/i)).toBeInTheDocument();
   });
 
-  it('logs out user when logout is confirmed', () => {
+  it('logs out user when logout is clicked', () => {
     const mockUser = { id: 1, name: 'Test User', role: 'retailer' };
     localStorage.setItem('user', JSON.stringify(mockUser));
     localStorage.setItem('token', 'test-token');
+    localStorage.setItem('cart_1', JSON.stringify([{ productId: 1, quantity: 1 }]));
 
     // Mock window.location.reload
     const reloadMock = vi.fn();
@@ -135,24 +142,22 @@ describe('Navbar', () => {
       </BrowserRouter>
     );
 
-    // Open logout modal - get the navbar logout button (first one)
-    const logoutButtons = screen.getAllByText('Logout');
-    const navbarLogoutButton = logoutButtons[0];
-    fireEvent.click(navbarLogoutButton);
+    // Click username button to open menu
+    const usernameButton = screen.getByText('Test User').closest('button');
+    fireEvent.click(usernameButton);
 
-    // Confirm logout - get all logout buttons and find the one with 'danger' class (modal button)
-    const allLogoutButtons = screen.getAllByRole('button', { name: 'Logout' });
-    const modalLogoutButton = allLogoutButtons.find(btn => btn.classList.contains('danger'));
-    expect(modalLogoutButton).toBeDefined();
-    fireEvent.click(modalLogoutButton);
+    // Click logout button
+    const logoutButton = screen.getByText(/Logout/i);
+    fireEvent.click(logoutButton);
 
     // Check that localStorage is cleared
     expect(localStorage.getItem('token')).toBeNull();
     expect(localStorage.getItem('user')).toBeNull();
-    expect(mockNavigate).toHaveBeenCalledWith('/');
+    expect(localStorage.getItem('cart_1')).toBeNull();
+    expect(reloadMock).toHaveBeenCalled();
   });
 
-  it('closes logout modal when cancel is clicked', () => {
+  it('closes profile menu when clicking outside', () => {
     const mockUser = { id: 1, name: 'Test User', role: 'retailer' };
     localStorage.setItem('user', JSON.stringify(mockUser));
 
@@ -162,18 +167,18 @@ describe('Navbar', () => {
       </BrowserRouter>
     );
 
-    // Open logout modal - get the navbar logout button (first one)
-    const logoutButtons = screen.getAllByText('Logout');
-    const navbarLogoutButton = logoutButtons[0];
-    fireEvent.click(navbarLogoutButton);
+    // Click username button to open menu
+    const usernameButton = screen.getByText('Test User').closest('button');
+    fireEvent.click(usernameButton);
 
-    expect(screen.getByText('Confirm Logout')).toBeInTheDocument();
+    // Menu should be visible
+    expect(screen.getByText(/Settings/i)).toBeInTheDocument();
 
-    // Click cancel
-    const cancelButton = screen.getByText('Cancel');
-    fireEvent.click(cancelButton);
+    // Click outside (on the document body)
+    fireEvent.mouseDown(document.body);
 
-    expect(screen.queryByText('Confirm Logout')).not.toBeInTheDocument();
+    // Menu should be closed (Settings and Logout should not be visible)
+    expect(screen.queryByText(/Settings/i)).not.toBeInTheDocument();
   });
 });
 

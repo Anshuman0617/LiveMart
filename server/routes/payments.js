@@ -40,14 +40,16 @@ router.post('/create-payment', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Name, email, and phone are required' });
     }
 
-    // Calculate total
+    // Calculate total with discounts applied
     let total = 0;
     for (const it of items) {
       const product = await Product.findByPk(it.productId);
       if (!product) continue;
       const unitPrice = parseFloat(product.price);
+      const discount = parseFloat(product.discount || 0);
+      const discountedPrice = unitPrice * (1 - discount / 100);
       const qty = parseInt(it.quantity, 10);
-      total += unitPrice * qty;
+      total += discountedPrice * qty;
     }
 
     const merchantKey = process.env.PAYU_MERCHANT_KEY || '';
@@ -162,16 +164,18 @@ router.post('/verify-payment', authMiddleware, async (req, res) => {
       for (const it of items) {
         const product = await Product.findByPk(it.productId);
         if (!product) continue;
-        const unitPrice = parseFloat(product.price);
+        const originalPrice = parseFloat(product.price);
+        const discount = parseFloat(product.discount || 0);
+        const discountedPrice = originalPrice * (1 - discount / 100);
         const qty = parseInt(it.quantity, 10);
-        const subtotal = unitPrice * qty;
+        const subtotal = discountedPrice * qty; // Use discounted price for subtotal
         total += subtotal;
         
         const orderItem = await OrderItem.create({
           orderId: order.id,
           productId: product.id,
           quantity: qty,
-          unitPrice,
+          unitPrice: discountedPrice, // Store discounted price as unit price
           subtotal,
         });
         

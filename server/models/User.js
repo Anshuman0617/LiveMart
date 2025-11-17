@@ -13,8 +13,16 @@ export default (sequelize) => {
     providerId: { type: DataTypes.STRING, allowNull: true },
     picture: { type: DataTypes.STRING, allowNull: true },
     address: { type: DataTypes.STRING, allowNull: true },
+    phone: { type: DataTypes.STRING, allowNull: true },
     lat: { type: DataTypes.DECIMAL(10,7), allowNull: true },
-    lng: { type: DataTypes.DECIMAL(10,7), allowNull: true }
+    lng: { type: DataTypes.DECIMAL(10,7), allowNull: true },
+    // Payment account details for retailers/wholesalers
+    bankAccountName: { type: DataTypes.STRING, allowNull: true },
+    bankAccountNumber: { type: DataTypes.STRING, allowNull: true },
+    bankIFSC: { type: DataTypes.STRING, allowNull: true },
+    bankName: { type: DataTypes.STRING, allowNull: true },
+    upiId: { type: DataTypes.STRING, allowNull: true },
+    payuMerchantKey: { type: DataTypes.STRING, allowNull: true } // If seller has their own PayU account
   }, {
     tableName: 'users',
     timestamps: true

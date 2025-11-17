@@ -1,20 +1,23 @@
 // client/src/pages/Products.jsx
-import React, { useState, useEffect, useCallback } from "react";
-import { api } from "../api";
-import AddressAutocomplete from "../components/AddressAutocomplete";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { api, authHeader } from "../api";
 import { Link, useNavigate } from "react-router-dom";
 import debounce from "lodash.debounce";
 
+// Products page - accessible to all users (including unauthenticated)
 export default function Products() {
   const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
   
   // Check if user is a retailer - they shouldn't see regular products
+  // Note: Unauthenticated users can access this page
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('user') || 'null');
     if (user?.role === 'retailer') {
-      alert('Retailers can only view and manage their own products. Redirecting to Retailer Dashboard.');
-      navigate('/retailer');
+      navigate('/retailer', { replace: true });
+      return;
     }
   }, [navigate]);
 
@@ -26,44 +29,101 @@ export default function Products() {
   const [sort, setSort] = useState("");
 
   const [latLng, setLatLng] = useState(null);
-  const [address, setAddress] = useState("");
-  const [saving, setSaving] = useState(false);
+  const hasInitiallyFetchedRef = useRef(false);
 
-  const fetchProducts = async (params = {}) => {
+  const fetchProducts = useCallback(async (params = {}) => {
     try {
+      setLoading(true);
+      setError(null);
       const res = await api.get("/products", { params });
       setProducts(res.data.products || []);
     } catch (err) {
-      console.error(err);
+      console.error('Failed to fetch products:', err);
+      setError(err.response?.data?.error || 'Failed to load products. Please try again.');
+      setProducts([]);
+    } finally {
+      setLoading(false);
     }
-  };
+  }, []);
 
   const debouncedSearch = useCallback(
     debounce((params) => fetchProducts(params), 300),
-    []
+    [fetchProducts]
   );
 
-  // Load user's saved address on mount
-  useEffect(() => {
-    const loadUserProfile = async () => {
-      try {
-        const res = await api.get("/users/me");
-        const user = res.data;
-        if (user.address) {
-          setAddress(user.address);
-        }
-        if (user.lat && user.lng) {
-          setLatLng({ lat: user.lat, lng: user.lng });
-        }
-      } catch (err) {
-        // User not logged in or error - that's okay
-        console.log("Could not load user profile:", err);
+  // Load user's saved location on mount and when user updates (optional - works without login)
+  const loadUserProfile = useCallback(async () => {
+    try {
+      const res = await api.get("/users/me");
+      const user = res.data;
+      if (user.lat != null && user.lng != null) {
+        const newLatLng = { lat: Number(user.lat), lng: Number(user.lng) };
+        setLatLng(newLatLng);
+        return newLatLng;
       }
-    };
-    loadUserProfile();
+    } catch (err) {
+      // User not logged in or error - that's okay, page works without authentication
+      console.log("Could not load user profile (user may not be logged in):", err);
+    }
+    return null;
   }, []);
 
   useEffect(() => {
+    loadUserProfile();
+  }, [loadUserProfile]);
+
+  // Listen for userLogin event to reload location when address is updated
+  useEffect(() => {
+    const handleUserLogin = async () => {
+      const newLatLng = await loadUserProfile();
+      // If location was updated, refetch products with new location
+      if (newLatLng && hasInitiallyFetchedRef.current) {
+        const params = {};
+        if (q) params.q = q;
+        if (minPrice) params.minPrice = minPrice;
+        if (maxPrice) params.maxPrice = maxPrice;
+        if (sort) params.sort = sort;
+        if (maxDistanceKm) params.maxDistanceKm = maxDistanceKm;
+        params.lat = newLatLng.lat;
+        params.lng = newLatLng.lng;
+        fetchProducts(params);
+      }
+    };
+
+    window.addEventListener('userLogin', handleUserLogin);
+    return () => {
+      window.removeEventListener('userLogin', handleUserLogin);
+    };
+  }, [loadUserProfile, fetchProducts, q, minPrice, maxPrice, sort, maxDistanceKm]);
+
+  // Initial fetch on mount
+  useEffect(() => {
+    // Don't fetch if user is a retailer (they'll be redirected)
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    if (user?.role === 'retailer') {
+      return;
+    }
+
+    // Fetch products immediately on mount (only once)
+    if (!hasInitiallyFetchedRef.current) {
+      hasInitiallyFetchedRef.current = true;
+      fetchProducts({});
+    }
+  }, [fetchProducts]); // Only run when fetchProducts changes (which is stable)
+
+  // Fetch products when filters or location change (debounced)
+  useEffect(() => {
+    // Don't fetch if user is a retailer (they'll be redirected)
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    if (user?.role === 'retailer') {
+      return;
+    }
+
+    // Skip if we haven't done the initial fetch yet
+    if (!hasInitiallyFetchedRef.current) {
+      return;
+    }
+
     const params = {};
     if (q) params.q = q;
     if (minPrice) params.minPrice = minPrice;
@@ -74,88 +134,33 @@ export default function Products() {
       params.lat = latLng.lat;
       params.lng = latLng.lng;
     }
+    
+    // Use debounced search for filter changes
     debouncedSearch(params);
   }, [q, minPrice, maxPrice, sort, maxDistanceKm, latLng, debouncedSearch]);
 
   const useMyLocation = async () => {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        const newLatLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        const newLatLng = { lat: Number(pos.coords.latitude), lng: Number(pos.coords.longitude) };
         setLatLng(newLatLng);
         
-        // Save to user profile if logged in
+        // Save only lat/lng to user profile (not address) - address will override this when set
         try {
           await api.put("/users/me", {
             lat: newLatLng.lat,
             lng: newLatLng.lng,
-          });
-          alert("Location saved!");
+          }, { headers: authHeader() });
+          alert("Location saved! This will be used for distance calculations.");
         } catch (err) {
           console.error("Failed to save location:", err);
+          alert("Failed to save location. Please try again.");
         }
       },
       () => alert("Failed to access location")
     );
   };
 
-  const handlePlaceSelected = async (selectedAddress, place) => {
-    if (place?.geometry?.location) {
-      const newLatLng = {
-        lat: place.geometry.location.lat(),
-        lng: place.geometry.location.lng(),
-      };
-      setLatLng(newLatLng);
-      setAddress(selectedAddress);
-      
-      // Save address and coordinates to user profile
-      setSaving(true);
-      try {
-        await api.put("/users/me", {
-          address: selectedAddress,
-          lat: newLatLng.lat,
-          lng: newLatLng.lng,
-        });
-        alert("Address saved successfully!");
-      } catch (err) {
-        console.error("Failed to save address:", err);
-        alert("Failed to save address. Please try again.");
-      } finally {
-        setSaving(false);
-      }
-    }
-  };
-
-  const handleSaveAddress = async () => {
-    if (!address.trim()) {
-      alert("Please enter an address first");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const payload = { address: address };
-      // If we have lat/lng from autocomplete, send it; otherwise server will geocode
-      if (latLng) {
-        payload.lat = latLng.lat;
-        payload.lng = latLng.lng;
-      }
-      
-      const res = await api.put("/users/me", payload);
-      const updatedUser = res.data;
-      
-      // Update local state with the geocoded coordinates if we didn't have them
-      if (!latLng && updatedUser.lat && updatedUser.lng) {
-        setLatLng({ lat: updatedUser.lat, lng: updatedUser.lng });
-      }
-      
-      alert("Address saved successfully!");
-    } catch (err) {
-      console.error("Failed to save address:", err);
-      alert("Failed to save address. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  };
 
   return (
     <div className="App">
@@ -201,19 +206,6 @@ export default function Products() {
 
       {/* Location */}
       <div className="row" style={{ marginBottom: 20, flexWrap: "wrap", gap: "8px" }}>
-        <AddressAutocomplete
-          placeholder="Enter location..."
-          value={address}
-          onChange={setAddress}
-          onPlaceSelected={handlePlaceSelected}
-        />
-        <button 
-          onClick={handleSaveAddress} 
-          disabled={saving || !address.trim()}
-          style={{ minWidth: 100 }}
-        >
-          {saving ? "Saving..." : "Save Address"}
-        </button>
         <button onClick={useMyLocation}>Use My Location</button>
 
         <input
@@ -223,17 +215,37 @@ export default function Products() {
           type="number"
           style={{ maxWidth: 150 }}
         />
+        
+        {latLng && latLng.lat != null && latLng.lng != null && (
+          <p style={{ margin: 0, color: "#666", fontSize: "0.9em", alignSelf: "center" }}>
+            📍 Location set: {Number(latLng.lat).toFixed(4)}, {Number(latLng.lng).toFixed(4)}
+          </p>
+        )}
       </div>
-      
-      {address && (
-        <p style={{ marginBottom: 10, color: "#666", fontSize: "0.9em" }}>
-          📍 Your location: {address}
-        </p>
+
+      {/* Error Message */}
+      {error && (
+        <div style={{ 
+          padding: '16px', 
+          backgroundColor: '#fee2e2', 
+          color: '#dc2626', 
+          borderRadius: '8px', 
+          marginBottom: '20px' 
+        }}>
+          {error}
+        </div>
+      )}
+
+      {/* Loading State */}
+      {loading && !error && (
+        <div style={{ padding: '20px', textAlign: 'center' }}>
+          <p>Loading products...</p>
+        </div>
       )}
 
       {/* PRODUCT GRID */}
       <div className="cards">
-        {products.length === 0 && <p>No products found.</p>}
+        {!loading && !error && products.length === 0 && <p>No products found.</p>}
 
         {products.map((p) => {
           // Get first image (use images array if available, otherwise imageUrl)
@@ -306,14 +318,22 @@ export default function Products() {
                 const cart = JSON.parse(localStorage.getItem(cartKey) || "[]");
                 const existing = cart.find((c) => c.productId === p.id);
 
-                if (existing) existing.quantity++;
-                else
+                const maxQuantity = Math.min(10, p.stock || 10);
+                
+                if (existing) {
+                  if (existing.quantity >= maxQuantity) {
+                    alert(`Maximum ${maxQuantity} items allowed for this product.`);
+                    return;
+                  }
+                  existing.quantity++;
+                } else {
                   cart.push({
                     productId: p.id,
                     title: p.title,
                     price: p.price,
                     quantity: 1,
                   });
+                }
 
                 localStorage.setItem(cartKey, JSON.stringify(cart));
                 alert("Added to cart!");

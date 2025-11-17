@@ -195,7 +195,7 @@ async function seed() {
 
   // Create products for Adam (retailer with location)
   // Always create the seed products for Adam
-  const productsToCreate = [
+  const adamProductsToCreate = [
     { 
       title: 'Fresh Apples (1kg)', 
       description: 'Crisp and juicy red apples, locally sourced', 
@@ -239,18 +239,118 @@ async function seed() {
   ];
 
   // Check which products already exist (by title) to avoid duplicates
-  const existingProducts = await Product.findAll({ 
+  const existingAdamProducts = await Product.findAll({ 
     where: { ownerId: adam.id } 
   });
   
-  const existingTitles = new Set(existingProducts.map(p => p.title));
-  const newProducts = productsToCreate.filter(p => !existingTitles.has(p.title));
+  const existingAdamTitles = new Set(existingAdamProducts.map(p => p.title));
+  const newAdamProducts = adamProductsToCreate.filter(p => !existingAdamTitles.has(p.title));
 
-  if (newProducts.length > 0) {
-    await Product.bulkCreate(newProducts);
-    console.log(`Created ${newProducts.length} new product(s) for retailer Adam`);
+  if (newAdamProducts.length > 0) {
+    await Product.bulkCreate(newAdamProducts);
+    console.log(`Created ${newAdamProducts.length} new product(s) for retailer Adam`);
   } else {
     console.log('All seed products already exist for Adam');
+  }
+
+  // Create or update Badam (wholesaler) with address
+  let badam = await User.findOne({ where: { email: 'badam@example.com' }});
+  
+  if (!badam) {
+    // Badam doesn't exist - create with defaults
+    const badamPassword = 'password';
+    const badamAddress = '456 Wholesale Avenue, Los Angeles, CA 90001, USA'; // Default address
+    const h = await bcrypt.hash(badamPassword, 10);
+    
+    // Geocode address
+    const geo = await geocodeAddress(badamAddress);
+    if (!geo) {
+      console.warn('⚠️ Failed to geocode Badam\'s address. Using default coordinates.');
+    }
+    
+    badam = await User.create({
+      email: 'badam@example.com',
+      name: 'Badam',
+      passwordHash: h,
+      role: 'wholesaler',
+      address: badamAddress,
+      lat: geo?.lat || 34.0522, // Default to LA if geocoding fails
+      lng: geo?.lng || -118.2437
+    });
+    console.log('Created wholesaler Badam with default address:', badamAddress);
+  } else {
+    // Badam exists - use his existing password and address
+    console.log('Found existing Badam user');
+    
+    // Only update address/location if missing
+    if (!badam.address || !badam.lat || !badam.lng) {
+      // If address exists but no lat/lng, geocode it
+      if (badam.address && (!badam.lat || !badam.lng)) {
+        const geo = await geocodeAddress(badam.address);
+        if (geo) {
+          badam.lat = geo.lat;
+          badam.lng = geo.lng;
+          await badam.save();
+          console.log('Geocoded Badam\'s existing address:', badam.address);
+        } else {
+          console.warn('⚠️ Failed to geocode Badam\'s existing address.');
+        }
+      } else {
+        // No address at all - set default
+        const defaultAddress = '456 Wholesale Avenue, Los Angeles, CA 90001, USA';
+        const geo = await geocodeAddress(defaultAddress);
+        badam.address = defaultAddress;
+        badam.lat = geo?.lat || 34.0522;
+        badam.lng = geo?.lng || -118.2437;
+        await badam.save();
+        console.log('Set default address for Badam:', defaultAddress);
+      }
+    } else {
+      console.log('Badam already has address and location set:', badam.address);
+    }
+  }
+
+  // Create products for Badam (wholesaler with location)
+  const badamProductsToCreate = [
+    { 
+      title: 'Bulk Rice (50kg)', 
+      description: 'Premium quality basmati rice, perfect for restaurants and retailers. Wholesale pricing available for bulk orders.', 
+      price: 150.00, 
+      stock: 500, 
+      ownerId: badam.id, 
+      ownerType: 'wholesaler' 
+    },
+    { 
+      title: 'Wholesale Sugar (25kg)', 
+      description: 'Fine granulated sugar, ideal for commercial use. Best prices for bulk purchases.', 
+      price: 80.00, 
+      stock: 300, 
+      ownerId: badam.id, 
+      ownerType: 'wholesaler' 
+    },
+    { 
+      title: 'Bulk Cooking Oil (20L)', 
+      description: 'Pure vegetable cooking oil, suitable for restaurants and food businesses. Wholesale rates apply.', 
+      price: 120.00, 
+      stock: 200, 
+      ownerId: badam.id, 
+      ownerType: 'wholesaler' 
+    }
+  ];
+
+  // Check which products already exist (by title) to avoid duplicates
+  const existingBadamProducts = await Product.findAll({ 
+    where: { ownerId: badam.id } 
+  });
+  
+  const existingBadamTitles = new Set(existingBadamProducts.map(p => p.title));
+  const newBadamProducts = badamProductsToCreate.filter(p => !existingBadamTitles.has(p.title));
+
+  if (newBadamProducts.length > 0) {
+    await Product.bulkCreate(newBadamProducts);
+    console.log(`Created ${newBadamProducts.length} new product(s) for wholesaler Badam`);
+  } else {
+    console.log('All seed products already exist for Badam');
   }
 
   console.log('Seeding complete');

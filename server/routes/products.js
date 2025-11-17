@@ -25,7 +25,8 @@ const upload = multer({ storage });
 
 
 // ---------- LIST / SEARCH / FILTER / SORT ----------
-router.get('/', async (req, res) => {
+// Optional auth: allows both authenticated and unauthenticated users
+router.get('/', authMiddleware, async (req, res) => {
   try {
     const {
       q,
@@ -42,8 +43,21 @@ router.get('/', async (req, res) => {
 
     const where = {};
 
-    if (ownerType === 'retailer' || ownerType === 'wholesaler')
+    // Filter by ownerType if explicitly requested
+    if (ownerType === 'retailer' || ownerType === 'wholesaler') {
       where.ownerType = ownerType;
+    } else {
+      // If ownerType is not specified, filter based on user role
+      // Only retailers can see wholesaler products
+      // Regular users (customers) should only see retailer products
+      const userRole = req.user?.role;
+      if (userRole !== 'retailer') {
+        // Non-retailers (customers, wholesalers, etc.) can only see retailer products
+        where.ownerType = 'retailer';
+      }
+      // If user is a retailer and ownerType is not specified, show all products (retailer + wholesaler)
+      // This allows retailers to see both types when browsing
+    }
 
     if (minPrice)
       where.price = { ...(where.price || {}), [Op.gte]: parseFloat(minPrice) };
@@ -161,7 +175,8 @@ if (q) {
 
 
 // ---------- GET SINGLE PRODUCT ----------
-router.get('/:id', async (req, res) => {
+// Optional auth: allows both authenticated and unauthenticated users
+router.get('/:id', authMiddleware, async (req, res) => {
   const p = await Product.findByPk(req.params.id, {
     include: [
       { model: User, as: 'owner',
@@ -170,6 +185,14 @@ router.get('/:id', async (req, res) => {
     ]
   });
   if (!p) return res.status(404).json({ error: "Not found" });
+  
+  // Only retailers can access wholesaler products
+  // Regular users (customers) should not be able to see wholesaler products
+  const userRole = req.user?.role;
+  if (p.ownerType === 'wholesaler' && userRole !== 'retailer') {
+    return res.status(403).json({ error: "Access denied. Wholesale products are only available to retailers." });
+  }
+  
   res.json(p);
 });
 
@@ -242,8 +265,24 @@ router.put(
 
       if (req.files?.length) {
         const newImgs = req.files.map(f => `/uploads/${f.filename}`);
-        payload.images = [...(p.images || []), ...newImgs];
-        if (!p.imageUrl) payload.imageUrl = newImgs[0];
+        const currentImages = p.images || [];
+        const totalImages = currentImages.length + newImgs.length;
+        
+        // Limit to 6 images total
+        if (totalImages > 6) {
+          const allowedNew = 6 - currentImages.length;
+          if (allowedNew > 0) {
+            payload.images = [...currentImages, ...newImgs.slice(0, allowedNew)];
+          } else {
+            payload.images = currentImages; // No new images if already at limit
+          }
+        } else {
+          payload.images = [...currentImages, ...newImgs];
+        }
+        
+        if (!p.imageUrl && payload.images.length > 0) {
+          payload.imageUrl = payload.images[0];
+        }
       }
 
       // Remove lat/lng from payload - products use owner's address
@@ -259,6 +298,46 @@ router.put(
   }
 );
 
+
+// ---------- DELETE PRODUCT IMAGE ----------
+router.delete('/:id/images/:imageIndex', authMiddleware, async (req, res) => {
+  try {
+    const p = await Product.findByPk(req.params.id);
+    if (!p) return res.status(404).json({ error: "Not found" });
+
+    // Only owner or admin
+    if (req.user.role !== 'admin' &&
+        !(req.user.id === p.ownerId && req.user.role === p.ownerType)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const imageIndex = parseInt(req.params.imageIndex);
+    const images = p.images || [];
+    
+    if (imageIndex < 0 || imageIndex >= images.length) {
+      return res.status(400).json({ error: "Invalid image index" });
+    }
+
+    // Remove the image at the specified index
+    const updatedImages = images.filter((_, idx) => idx !== imageIndex);
+    
+    // Update imageUrl if it was the deleted image
+    let newImageUrl = p.imageUrl;
+    if (p.imageUrl === images[imageIndex]) {
+      newImageUrl = updatedImages[0] || null;
+    }
+
+    await p.update({
+      images: updatedImages,
+      imageUrl: newImageUrl
+    });
+
+    res.json({ ok: true, images: updatedImages, imageUrl: newImageUrl });
+  } catch (err) {
+    console.error("DELETE IMAGE ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
 // ---------- DELETE PRODUCT ----------
 router.delete('/:id', authMiddleware, async (req, res) => {
