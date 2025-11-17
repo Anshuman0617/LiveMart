@@ -2,6 +2,9 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+import { Sequelize } from 'sequelize';
+import pkg from 'pg';
+const { Client } = pkg;
 import { sequelize, User, Product } from './models/index.js';
 import bcrypt from 'bcryptjs';
 
@@ -29,8 +32,71 @@ async function geocodeAddress(address) {
   }
 }
 
+// Create database if it doesn't exist
+async function ensureDatabaseExists() {
+  const dbName = process.env.DB_NAME;
+  const dbUser = process.env.DB_USER;
+  const dbPass = process.env.DB_PASS;
+  const dbHost = process.env.DB_HOST || 'localhost';
+  const dbPort = process.env.DB_PORT || 5432;
+
+  if (!dbName) {
+    throw new Error('DB_NAME is not set in .env file');
+  }
+
+  // Connect to PostgreSQL server (using default 'postgres' database)
+  const adminClient = new Client({
+    host: dbHost,
+    port: parseInt(dbPort),
+    user: dbUser,
+    password: dbPass,
+    database: 'postgres' // Connect to default database
+  });
+
+  try {
+    await adminClient.connect();
+    console.log('Connected to PostgreSQL server');
+
+    // Check if database exists
+    const result = await adminClient.query(
+      `SELECT 1 FROM pg_database WHERE datname = $1`,
+      [dbName]
+    );
+
+    if (result.rows.length === 0) {
+      // Database doesn't exist, create it
+      console.log(`Database '${dbName}' does not exist. Creating...`);
+      await adminClient.query(`CREATE DATABASE "${dbName}"`);
+      console.log(`✓ Database '${dbName}' created successfully`);
+    } else {
+      console.log(`✓ Database '${dbName}' already exists`);
+    }
+  } catch (err) {
+    console.error('Error checking/creating database:', err);
+    throw err;
+  } finally {
+    await adminClient.end();
+  }
+}
+
 async function seed() {
-  await sequelize.sync({ alter: true });
+  try {
+    // Ensure database exists before connecting
+    await ensureDatabaseExists();
+    
+    // Now connect to the target database
+    console.log('Connecting to database...');
+    await sequelize.authenticate();
+    console.log('✓ Database connected');
+    
+    // Sync schema
+    console.log('Syncing database schema...');
+    await sequelize.sync({ alter: true });
+    console.log('✓ Database schema synced');
+  } catch (err) {
+    console.error('Database connection error:', err);
+    throw err;
+  }
 
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
   const adminPass = process.env.ADMIN_PASSWORD || 'admin123';
