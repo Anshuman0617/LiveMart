@@ -13,6 +13,7 @@ import Cart from "./pages/Cart";
 import WholesaleCart from "./pages/WholesaleCart";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentFailure from "./pages/PaymentFailure";
+import Orders from "./pages/Orders";
 
 import "./App.css";
 
@@ -37,6 +38,8 @@ export default function App() {
         <Route path="/payment-failure" element={<PaymentFailure />} />
 
         <Route path="/wholesale-products" element={<WholesaleProducts />} />
+
+        <Route path="/orders" element={<Orders />} />
 
       </Routes>
     </BrowserRouter>

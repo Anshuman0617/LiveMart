@@ -119,7 +119,7 @@ async function seed() {
   if (!adam) {
     // Adam doesn't exist - create with defaults
     const adamPassword = 'password';
-    const adamAddress = '123 Main Street, New York, NY 10001, USA'; // Default address
+    const adamAddress = 'Opp Secunderabad Railway Station, Secunderabad, Telangana 500078, India'; // Default address
     const h = await bcrypt.hash(adamPassword, 10);
     
     // Geocode address
@@ -157,11 +157,11 @@ async function seed() {
         }
       } else {
         // No address at all - set default
-        const defaultAddress = '123 Main Street, New York, NY 10001, USA';
+        const defaultAddress = 'Opp Secunderabad Railway Station, Secunderabad, Telangana 500078, India';
         const geo = await geocodeAddress(defaultAddress);
         adam.address = defaultAddress;
-        adam.lat = geo?.lat || 40.7128;
-        adam.lng = geo?.lng || -74.0060;
+        adam.lat = geo?.lat || 17.4399;
+        adam.lng = geo?.lng || 78.4983;
         await adam.save();
         console.log('Set default address for Adam:', defaultAddress);
       }

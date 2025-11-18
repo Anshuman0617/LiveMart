@@ -244,7 +244,11 @@ export default function Products() {
       )}
 
       {/* PRODUCT GRID */}
-      <div className="cards">
+      <div style={{ 
+        display: "grid", 
+        gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", 
+        gap: "20px"
+      }}>
         {!loading && !error && products.length === 0 && <p>No products found.</p>}
 
         {products.map((p) => {
@@ -252,110 +256,190 @@ export default function Products() {
           const firstImage = (p.images && p.images.length > 0) ? p.images[0] : p.imageUrl;
           
           return (
-          <div className="product-card" key={p.id}>
-            {firstImage && (
-              <img
-                src={`http://localhost:4000${firstImage}`}
-                alt={p.title}
-              />
-            )}
+            <div 
+              key={p.id} 
+              style={{
+                border: "1px solid #e0e0e0",
+                borderRadius: "12px",
+                padding: "16px",
+                backgroundColor: "#fff",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "12px"
+              }}
+            >
+              {/* Product Image */}
+              {firstImage && (
+                <img
+                  src={`http://localhost:4000${firstImage}`}
+                  alt={p.title}
+                  style={{
+                    width: "100%",
+                    height: "200px",
+                    objectFit: "cover",
+                    borderRadius: "8px"
+                  }}
+                />
+              )}
 
-            <h3>
-              <Link to={`/product/${p.id}`}>{p.title}</Link>
-            </h3>
+              {/* Product Title */}
+              <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "600" }}>
+                <Link to={`/product/${p.id}`} style={{ color: "inherit", textDecoration: "none" }}>
+                  {p.title}
+                </Link>
+              </h3>
 
-            <p>{p.description}</p>
-            
-            {/* Price with discount indicator */}
-            <div style={{ marginBottom: "8px" }}>
-              {p.discount && p.discount > 0 ? (
-                <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px", flexWrap: "wrap" }}>
-                    <span style={{ 
-                      fontSize: "20px", 
-                      fontWeight: "bold", 
-                      color: "#22c55e" 
-                    }}>
-                      ₹{(p.price*(1-p.discount/100)).toFixed(2)}
-                    </span>
-                    <span style={{ 
-                      fontSize: "14px", 
-                      color: "#999", 
-                      textDecoration: "line-through" 
-                    }}>
-                      ₹{parseFloat(p.price).toFixed(2)}
-                    </span>
-                    <span style={{ 
-                      fontSize: "12px", 
-                      color: "#dc2626", 
-                      fontWeight: "600",
-                      backgroundColor: "#fee2e2",
-                      padding: "2px 6px",
-                      borderRadius: "4px"
-                    }}>
-                      {p.discount}% OFF
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <p style={{ margin: 0, fontSize: "18px", fontWeight: "bold" }}>
-                  <strong>Price:</strong> ₹{parseFloat(p.price).toFixed(2)}
+              {/* Description */}
+              {p.description && (
+                <p style={{ 
+                  margin: 0, 
+                  color: "#666", 
+                  fontSize: "14px",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 3,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                  lineHeight: "1.5"
+                }}>
+                  {p.description}
                 </p>
               )}
-            </div>
 
-            {p.distanceKm !== null && (
-              <p><strong>Distance:</strong> {p.distanceKm} km</p>
-            )}
+              {/* Price with discount indicator */}
+              <div style={{ marginTop: "auto" }}>
+                {p.discount && p.discount > 0 ? (
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px", flexWrap: "wrap" }}>
+                      <span style={{ 
+                        fontSize: "20px", 
+                        fontWeight: "bold", 
+                        color: "#22c55e" 
+                      }}>
+                        ₹{(p.price*(1-p.discount/100)).toFixed(2)}
+                      </span>
+                      <span style={{ 
+                        fontSize: "14px", 
+                        color: "#999", 
+                        textDecoration: "line-through" 
+                      }}>
+                        ₹{parseFloat(p.price).toFixed(2)}
+                      </span>
+                      <span style={{ 
+                        fontSize: "12px", 
+                        color: "#dc2626", 
+                        fontWeight: "600",
+                        backgroundColor: "#fee2e2",
+                        padding: "2px 6px",
+                        borderRadius: "4px"
+                      }}>
+                        {p.discount}% OFF
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <p style={{ margin: "4px 0", fontSize: "20px", fontWeight: "bold", color: "#3399cc" }}>
+                    ₹{parseFloat(p.price).toFixed(2)}
+                  </p>
+                )}
 
-            <p><strong>Sold:</strong> {p.soldCount}</p>
+                {/* Stock indicator */}
+                {p.stock !== undefined && p.stock !== null && (
+                  <p style={{ margin: "4px 0", fontSize: "14px", color: "#666" }}>
+                    <strong>Stock:</strong> {p.stock} units
+                    {p.stock <= 0 && (
+                      <span style={{
+                        marginLeft: "8px",
+                        fontSize: "12px",
+                        color: "#dc2626",
+                        fontWeight: "600",
+                        backgroundColor: "#fee2e2",
+                        padding: "2px 8px",
+                        borderRadius: "4px"
+                      }}>
+                        OUT OF STOCK
+                      </span>
+                    )}
+                  </p>
+                )}
 
-            <button
-              onClick={() => {
-                const user = JSON.parse(localStorage.getItem('user') || 'null');
-                const userId = user?.id;
-                const cartKey = userId ? `cart_${userId}` : 'cart';
-                const cart = JSON.parse(localStorage.getItem(cartKey) || "[]");
-                const existing = cart.find((c) => c.productId === p.id);
+                {p.distanceKm !== null && (
+                  <p style={{ margin: "4px 0", fontSize: "12px", color: "#999" }}>
+                    <strong>Distance:</strong> {p.distanceKm} km
+                  </p>
+                )}
 
-                const maxQuantity = Math.min(10, p.stock || 10);
-                
-                if (existing) {
-                  if (existing.quantity >= maxQuantity) {
-                    alert(`Maximum ${maxQuantity} items allowed for this product.`);
+                {p.soldCount !== undefined && (
+                  <p style={{ margin: "4px 0", fontSize: "12px", color: "#999" }}>
+                    <strong>Sold:</strong> {p.soldCount}
+                  </p>
+                )}
+              </div>
+
+              {/* Add to Cart Button */}
+              <button
+                onClick={() => {
+                  // Check if product is out of stock
+                  if (p.stock !== undefined && p.stock !== null && p.stock <= 0) {
+                    alert("This product is out of stock!");
                     return;
                   }
-                  existing.quantity++;
-                } else {
-                  cart.push({
-                    productId: p.id,
-                    title: p.title,
-                    price: p.price,
-                    quantity: 1,
-                  });
-                }
 
-                localStorage.setItem(cartKey, JSON.stringify(cart));
-                alert("Added to cart!");
-              }}
-              style={{
-                backgroundColor: "#3399cc",
-                color: "white",
-                border: "none",
-                padding: "10px 20px",
-                borderRadius: "6px",
-                cursor: "pointer",
-                fontSize: "14px",
-                fontWeight: "600",
-                transition: "background 0.2s",
-                width: "100%"
-              }}
-              onMouseEnter={(e) => e.target.style.backgroundColor = "#2a7ba0"}
-              onMouseLeave={(e) => e.target.style.backgroundColor = "#3399cc"}
-            >
-              Add to Cart
-            </button>
-          </div>
+                  const user = JSON.parse(localStorage.getItem('user') || 'null');
+                  const userId = user?.id;
+                  const cartKey = userId ? `cart_${userId}` : 'cart';
+                  const cart = JSON.parse(localStorage.getItem(cartKey) || "[]");
+                  const existing = cart.find((c) => c.productId === p.id);
+
+                  const maxQuantity = Math.min(10, p.stock || 10);
+                  
+                  if (existing) {
+                    if (existing.quantity >= maxQuantity) {
+                      alert(`Maximum ${maxQuantity} items allowed for this product.`);
+                      return;
+                    }
+                    existing.quantity++;
+                  } else {
+                    cart.push({
+                      productId: p.id,
+                      title: p.title,
+                      price: p.price,
+                      quantity: 1,
+                    });
+                  }
+
+                  localStorage.setItem(cartKey, JSON.stringify(cart));
+                  alert("Added to cart!");
+                }}
+                disabled={p.stock !== undefined && p.stock !== null && p.stock <= 0}
+                style={{
+                  marginTop: "8px",
+                  padding: "8px 16px",
+                  backgroundColor: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "#9ca3af" : "#3399cc",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "not-allowed" : "pointer",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  transition: "background 0.2s",
+                  width: "100%",
+                  opacity: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? 0.6 : 1
+                }}
+                onMouseEnter={(e) => {
+                  if (!(p.stock !== undefined && p.stock !== null && p.stock <= 0)) {
+                    e.target.style.backgroundColor = "#2a7ba0";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!(p.stock !== undefined && p.stock !== null && p.stock <= 0)) {
+                    e.target.style.backgroundColor = "#3399cc";
+                  }
+                }}
+              >
+                {(p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "Out of Stock" : "Add to Cart"}
+              </button>
+            </div>
           );
         })}
       </div>

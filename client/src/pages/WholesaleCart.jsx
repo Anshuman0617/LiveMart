@@ -12,57 +12,81 @@ export default function WholesaleCart() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingProducts, setLoadingProducts] = useState(true);
+  const [orders, setOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(true);
   const navigate = useNavigate();
 
   // Load cart items with full product details
+  const loadCart = React.useCallback(async () => {
+    // Get user-specific wholesale cart
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    const userId = user?.id;
+    const cartKey = userId ? `wholesaleCart_${userId}` : 'wholesaleCart';
+    const c = JSON.parse(localStorage.getItem(cartKey) || "[]");
+    setCart(c);
+    
+    // Fetch full product details for each cart item
+    setLoadingProducts(true);
+    try {
+      const itemsWithDetails = await Promise.all(
+        c.map(async (item) => {
+          try {
+            const productRes = await api.get(`/products/${item.productId}`);
+            const product = productRes.data;
+            return {
+              ...item,
+              product: product,
+              discount: product.discount || 0,
+              imageUrl: product.imageUrl || (product.images && product.images[0]) || null,
+              description: product.description || ''
+            };
+          } catch (err) {
+            console.error(`Failed to load product ${item.productId}:`, err);
+            return {
+              ...item,
+              product: null,
+              discount: 0,
+              imageUrl: null,
+              description: ''
+            };
+          }
+        })
+      );
+      setCartItems(itemsWithDetails);
+    } catch (err) {
+      console.error("Failed to load cart products:", err);
+      setCartItems(c.map(item => ({ ...item, product: null, discount: 0, imageUrl: null, description: '' })));
+    } finally {
+      setLoadingProducts(false);
+    }
+  }, []);
+
   useEffect(() => {
-    const loadCart = async () => {
-      // Get user-specific wholesale cart
-      const user = JSON.parse(localStorage.getItem('user') || 'null');
-      const userId = user?.id;
-      const cartKey = userId ? `wholesaleCart_${userId}` : 'wholesaleCart';
-      const c = JSON.parse(localStorage.getItem(cartKey) || "[]");
-      setCart(c);
-      
-      // Fetch full product details for each cart item
-      setLoadingProducts(true);
-      try {
-        const itemsWithDetails = await Promise.all(
-          c.map(async (item) => {
-            try {
-              const productRes = await api.get(`/products/${item.productId}`);
-              const product = productRes.data;
-              return {
-                ...item,
-                product: product,
-                discount: product.discount || 0,
-                imageUrl: product.imageUrl || (product.images && product.images[0]) || null,
-                description: product.description || ''
-              };
-            } catch (err) {
-              console.error(`Failed to load product ${item.productId}:`, err);
-              return {
-                ...item,
-                product: null,
-                discount: 0,
-                imageUrl: null,
-                description: ''
-              };
-            }
-          })
-        );
-        setCartItems(itemsWithDetails);
-      } catch (err) {
-        console.error("Failed to load cart products:", err);
-        setCartItems(c.map(item => ({ ...item, product: null, discount: 0, imageUrl: null, description: '' })));
-      } finally {
-        setLoadingProducts(false);
+    loadCart();
+    
+    // Listen for cart cleared events (from payment success)
+    const handleCartCleared = (event) => {
+      if (event.detail.isWholesale) {
+        // Reload cart after it's been cleared
+        const user = JSON.parse(localStorage.getItem('user') || 'null');
+        const userId = user?.id;
+        const cartKey = userId ? `wholesaleCart_${userId}` : 'wholesaleCart';
+        const updatedCart = JSON.parse(localStorage.getItem(cartKey) || "[]");
+        setCart(updatedCart);
+        // Reload cart items
+        loadCart();
       }
     };
     
-    loadCart();
+    window.addEventListener('cartCleared', handleCartCleared);
     
-    // Load user's saved address and details
+    return () => {
+      window.removeEventListener('cartCleared', handleCartCleared);
+    };
+  }, [loadCart]); // Include loadCart in dependencies
+  
+  // Load user's saved address and details
+  useEffect(() => {
     const loadUserDetails = async () => {
       try {
         const res = await api.get("/users/me");
@@ -85,6 +109,23 @@ export default function WholesaleCart() {
       }
     };
     loadUserDetails();
+
+    // Load user orders
+    const loadOrders = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (token) {
+          const ordersRes = await api.get('/orders', { headers: authHeader() });
+          setOrders(ordersRes.data || []);
+        }
+      } catch (err) {
+        console.log("Could not load orders:", err);
+        setOrders([]);
+      } finally {
+        setLoadingOrders(false);
+      }
+    };
+    loadOrders();
   }, []);
 
   const updateCart = async (c, skipReload = false) => {
@@ -261,6 +302,12 @@ export default function WholesaleCart() {
 
       document.body.appendChild(form);
       form.submit();
+      // Remove form after submission to prevent issues
+      setTimeout(() => {
+        if (document.body.contains(form)) {
+          document.body.removeChild(form);
+        }
+      }, 1000);
     } catch (err) {
       console.error("Checkout error:", err);
       alert(
@@ -269,6 +316,26 @@ export default function WholesaleCart() {
       );
       setLoading(false);
     }
+  };
+
+  // Separate orders into current (undelivered) and previous (delivered)
+  const currentOrders = orders.filter(order => 
+    order.status !== 'delivered' && order.status !== 'cancelled' && order.status !== 'fulfilled'
+  );
+  const previousOrders = orders.filter(order => 
+    order.status === 'delivered' || order.status === 'fulfilled'
+  );
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   return (
@@ -605,6 +672,184 @@ export default function WholesaleCart() {
           >
             {loading ? "Processing..." : "Proceed to Checkout"}
           </button>
+        </>
+      )}
+
+      {/* Orders Section */}
+      {!loadingOrders && (
+        <>
+          {/* Current Orders (Undelivered) */}
+          {currentOrders.length > 0 && (
+            <div style={{ marginTop: '40px' }}>
+              <h2 style={{ marginBottom: '20px' }}>Orders</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {currentOrders.map((order) => (
+                  <div
+                    key={order.id}
+                    style={{
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                      padding: '16px',
+                      backgroundColor: '#fff'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>
+                          Order #{order.id}
+                        </h3>
+                        <p style={{ margin: '4px 0', fontSize: '14px', color: '#6b7280' }}>
+                          Ordered on: {formatDate(order.createdAt)}
+                        </p>
+                        <p style={{ margin: '4px 0', fontSize: '14px', color: '#6b7280' }}>
+                          Status: <span style={{ 
+                            color: order.status === 'confirmed' ? '#059669' : '#dc2626',
+                            fontWeight: 600
+                          }}>
+                            {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                          </span>
+                        </p>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <p style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>
+                          ₹{(() => {
+                            // Calculate total from items if order.total is missing or invalid
+                            if (order.total && !isNaN(parseFloat(order.total))) {
+                              return parseFloat(order.total).toFixed(2);
+                            }
+                            // Fallback: calculate from order items
+                            const calculatedTotal = order.items?.reduce((sum, item) => {
+                              const subtotal = parseFloat(item.subtotal) || 0;
+                              return sum + subtotal;
+                            }, 0) || 0;
+                            return calculatedTotal.toFixed(2);
+                          })()}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: '12px' }}>
+                      <p style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 600 }}>Items:</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {order.items?.map((item) => (
+                          <div key={item.id} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                            {item.product?.imageUrl || (item.product?.images && item.product.images[0]) ? (
+                              <img
+                                src={`http://localhost:4000${item.product.imageUrl || item.product.images[0]}`}
+                                alt={item.product?.title}
+                                style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px' }}
+                              />
+                            ) : null}
+                            <div style={{ flex: 1 }}>
+                              <p style={{ margin: 0, fontSize: '14px', fontWeight: 500 }}>
+                                {item.product?.title || 'Product'}
+                              </p>
+                              <p style={{ margin: '4px 0', fontSize: '12px', color: '#6b7280' }}>
+                                Qty: {item.quantity} × ₹{(() => {
+                                  const unitPrice = parseFloat(item.unitPrice) || 0;
+                                  return unitPrice.toFixed(2);
+                                })()} = ₹{(() => {
+                                  const subtotal = parseFloat(item.subtotal) || 0;
+                                  return subtotal.toFixed(2);
+                                })()}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Previous Orders (Delivered) */}
+          {previousOrders.length > 0 && (
+            <div style={{ marginTop: '40px' }}>
+              <h2 style={{ marginBottom: '20px' }}>Previous Orders</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {previousOrders.map((order) => (
+                  <div
+                    key={order.id}
+                    style={{
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                      padding: '16px',
+                      backgroundColor: '#f9fafb'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>
+                          Order #{order.id}
+                        </h3>
+                        <p style={{ margin: '4px 0', fontSize: '14px', color: '#6b7280' }}>
+                          Ordered on: {formatDate(order.createdAt)}
+                        </p>
+                        <p style={{ margin: '4px 0', fontSize: '14px', color: '#059669', fontWeight: 600 }}>
+                          ✓ Delivered
+                        </p>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <p style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>
+                          ₹{(() => {
+                            // Calculate total from items if order.total is missing or invalid
+                            if (order.total && !isNaN(parseFloat(order.total))) {
+                              return parseFloat(order.total).toFixed(2);
+                            }
+                            // Fallback: calculate from order items
+                            const calculatedTotal = order.items?.reduce((sum, item) => {
+                              const subtotal = parseFloat(item.subtotal) || 0;
+                              return sum + subtotal;
+                            }, 0) || 0;
+                            return calculatedTotal.toFixed(2);
+                          })()}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: '12px' }}>
+                      <p style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 600 }}>Items:</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {order.items?.map((item) => (
+                          <div key={item.id} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                            {item.product?.imageUrl || (item.product?.images && item.product.images[0]) ? (
+                              <img
+                                src={`http://localhost:4000${item.product.imageUrl || item.product.images[0]}`}
+                                alt={item.product?.title}
+                                style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px' }}
+                              />
+                            ) : null}
+                            <div style={{ flex: 1 }}>
+                              <p style={{ margin: 0, fontSize: '14px', fontWeight: 500 }}>
+                                {item.product?.title || 'Product'}
+                              </p>
+                              <p style={{ margin: '4px 0', fontSize: '12px', color: '#6b7280' }}>
+                                Qty: {item.quantity} × ₹{(() => {
+                                  const unitPrice = parseFloat(item.unitPrice) || 0;
+                                  return unitPrice.toFixed(2);
+                                })()} = ₹{(() => {
+                                  const subtotal = parseFloat(item.subtotal) || 0;
+                                  return subtotal.toFixed(2);
+                                })()}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {currentOrders.length === 0 && previousOrders.length === 0 && (
+            <div style={{ marginTop: '40px', textAlign: 'center', padding: '40px' }}>
+              <p style={{ fontSize: '16px', color: '#6b7280' }}>No orders yet</p>
+            </div>
+          )}
         </>
       )}
     </div>

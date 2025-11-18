@@ -58,6 +58,12 @@ export default function ProductDetail() {
       alert("Please login to add items to cart");
       return;
     }
+
+    // Check if product is out of stock
+    if (p.stock !== undefined && p.stock !== null && p.stock <= 0) {
+      alert("This product is out of stock!");
+      return;
+    }
     
     const userId = user.id;
     const cartKey = userId ? `cart_${userId}` : 'cart';
@@ -176,27 +182,57 @@ export default function ProductDetail() {
           <p style={{ margin: "0 0 12px 0" }}>
             <strong>Sold:</strong> {p.soldCount}
           </p>
+
+          {/* Stock indicator */}
+          {p.stock !== undefined && p.stock !== null && (
+            <p style={{ margin: "8px 0" }}>
+              <strong>Stock:</strong> {p.stock} units
+              {p.stock <= 0 && (
+                <span style={{
+                  marginLeft: "8px",
+                  fontSize: "12px",
+                  color: "#dc2626",
+                  fontWeight: "600",
+                  backgroundColor: "#fee2e2",
+                  padding: "2px 8px",
+                  borderRadius: "4px"
+                }}>
+                  OUT OF STOCK
+                </span>
+              )}
+            </p>
+          )}
           
           {/* Add to Cart Button - Only for regular users */}
           {isRegularUser && (
             <button
               onClick={handleAddToCart}
+              disabled={p.stock !== undefined && p.stock !== null && p.stock <= 0}
               style={{
                 marginTop: 16,
                 padding: "12px 24px",
                 fontSize: "16px",
                 fontWeight: "bold",
-                backgroundColor: "#3399cc",
+                backgroundColor: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "#9ca3af" : "#3399cc",
                 color: "white",
                 border: "none",
                 borderRadius: 8,
-                cursor: "pointer",
+                cursor: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "not-allowed" : "pointer",
                 width: "100%",
+                opacity: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? 0.6 : 1
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#2a7ba0")}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#3399cc")}
+              onMouseEnter={(e) => {
+                if (!(p.stock !== undefined && p.stock !== null && p.stock <= 0)) {
+                  e.currentTarget.style.backgroundColor = "#2a7ba0";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!(p.stock !== undefined && p.stock !== null && p.stock <= 0)) {
+                  e.currentTarget.style.backgroundColor = "#3399cc";
+                }
+              }}
             >
-              Add to Cart
+              {(p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "Out of Stock" : "Add to Cart"}
             </button>
           )}
         </div>

@@ -19,10 +19,10 @@ User.hasMany(Order, { as: 'orders', foreignKey: 'userId' });
 Order.belongsTo(User, { as: 'user', foreignKey: 'userId' });
 
 Order.hasMany(OrderItem, { as: 'items', foreignKey: 'orderId' });
-OrderItem.belongsTo(Order, { foreignKey: 'orderId' });
+OrderItem.belongsTo(Order, { as: 'order', foreignKey: 'orderId' });
 
 Product.hasMany(OrderItem, { as: 'orderItems', foreignKey: 'productId' });
-OrderItem.belongsTo(Product, { foreignKey: 'productId' });
+OrderItem.belongsTo(Product, { as: 'product', foreignKey: 'productId' });
 
 User.hasMany(Product, { foreignKey: 'ownerId', as: 'products' });
 Product.belongsTo(User, { foreignKey: 'ownerId', as: 'owner' });

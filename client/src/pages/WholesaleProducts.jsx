@@ -21,6 +21,12 @@ export default function WholesaleProducts() {
     const product = products.find((p) => p.id === productId);
     if (!product) return;
 
+    // Check if product is out of stock
+    if (product.stock !== undefined && product.stock !== null && product.stock <= 0) {
+      alert("This product is out of stock!");
+      return;
+    }
+
     const qty = parseInt(quantity[productId] || 1, 10);
     if (qty < 1) {
       alert("Quantity must be at least 1");
@@ -137,6 +143,19 @@ export default function WholesaleProducts() {
                 </p>
                 <p style={{ margin: "4px 0", fontSize: "14px", color: "#666" }}>
                   <strong>Stock:</strong> {p.stock} units
+                  {p.stock !== undefined && p.stock !== null && p.stock <= 0 && (
+                    <span style={{
+                      marginLeft: "8px",
+                      fontSize: "12px",
+                      color: "#dc2626",
+                      fontWeight: "600",
+                      backgroundColor: "#fee2e2",
+                      padding: "2px 8px",
+                      borderRadius: "4px"
+                    }}>
+                      OUT OF STOCK
+                    </span>
+                  )}
                 </p>
                 {p.owner && (
                   <p style={{ margin: "4px 0", fontSize: "12px", color: "#999" }}>
@@ -152,15 +171,21 @@ export default function WholesaleProducts() {
                   min="1"
                   max={Math.min(10, p.stock || 10)}
                   placeholder="Qty"
+                  disabled={p.stock !== undefined && p.stock !== null && p.stock <= 0}
                   style={{ 
                     width: "80px",
                     padding: "8px",
                     border: "1px solid #ddd",
                     borderRadius: "6px",
-                    fontSize: "14px"
+                    fontSize: "14px",
+                    opacity: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? 0.6 : 1,
+                    cursor: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "not-allowed" : "text"
                   }}
                   value={quantity[p.id] || ""}
                   onChange={(e) => {
+                    if (p.stock !== undefined && p.stock !== null && p.stock <= 0) {
+                      return;
+                    }
                     const val = e.target.value;
                     const maxQty = Math.min(10, p.stock || 10);
                     if (val && parseInt(val) > maxQty) {
@@ -172,22 +197,32 @@ export default function WholesaleProducts() {
                 />
                 <button 
                   onClick={() => addToWholesaleCart(p.id)}
+                  disabled={p.stock !== undefined && p.stock !== null && p.stock <= 0}
                   style={{
                     flex: 1,
                     padding: "8px 16px",
-                    backgroundColor: "#3399cc",
+                    backgroundColor: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "#9ca3af" : "#3399cc",
                     color: "white",
                     border: "none",
                     borderRadius: "6px",
-                    cursor: "pointer",
+                    cursor: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "not-allowed" : "pointer",
                     fontSize: "14px",
                     fontWeight: "600",
-                    transition: "background 0.2s"
+                    transition: "background 0.2s",
+                    opacity: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? 0.6 : 1
                   }}
-                  onMouseEnter={(e) => e.target.style.backgroundColor = "#2a7ba0"}
-                  onMouseLeave={(e) => e.target.style.backgroundColor = "#3399cc"}
+                  onMouseEnter={(e) => {
+                    if (!(p.stock !== undefined && p.stock !== null && p.stock <= 0)) {
+                      e.target.style.backgroundColor = "#2a7ba0";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!(p.stock !== undefined && p.stock !== null && p.stock <= 0)) {
+                      e.target.style.backgroundColor = "#3399cc";
+                    }
+                  }}
                 >
-                  Add to Cart
+                  {(p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "Out of Stock" : "Add to Cart"}
                 </button>
               </div>
             </div>

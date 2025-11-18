@@ -2,10 +2,12 @@
 import React, { useEffect, useState } from "react";
 import { api, authHeader } from "../api";
 import ProductForm from "../components/ProductForm";
+import { useNavigate } from "react-router-dom";
 
 export default function WholesalerDashboard() {
   const [products, setProducts] = useState([]);
   const [editing, setEditing] = useState(null);
+  const navigate = useNavigate();
 
   const fetchProducts = async () => {
     try {
@@ -71,7 +73,28 @@ export default function WholesalerDashboard() {
 
   return (
     <div className="App">
-      <h2>Wholesaler Dashboard</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h2 style={{ margin: 0 }}>Wholesaler Dashboard</h2>
+        <button
+          onClick={() => navigate('/orders')}
+          style={{
+            padding: '12px 24px',
+            backgroundColor: '#3399cc',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '16px',
+            fontWeight: 600,
+            transition: 'background 0.2s',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+          }}
+          onMouseEnter={(e) => e.target.style.backgroundColor = '#2a7fa3'}
+          onMouseLeave={(e) => e.target.style.backgroundColor = '#3399cc'}
+        >
+          📦 Manage Orders
+        </button>
+      </div>
 
       {!editing && (
         <ProductForm submitLabel="Add Product" onSubmit={createProduct} allowDiscount={false} />
