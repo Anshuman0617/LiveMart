@@ -16,6 +16,7 @@ export default function WholesaleProducts() {
   const [maxPrice, setMaxPrice] = useState("");
   const [maxDistanceKm, setMaxDistanceKm] = useState("");
   const [sort, setSort] = useState("");
+  const [category, setCategory] = useState("all");
 
   const [latLng, setLatLng] = useState(null);
   const hasInitiallyFetchedRef = useRef(false);
@@ -88,6 +89,7 @@ export default function WholesaleProducts() {
         if (minPrice) params.minPrice = minPrice;
         if (maxPrice) params.maxPrice = maxPrice;
         if (sort) params.sort = sort;
+        if (category && category !== 'all') params.category = category;
         if (maxDistanceKm) params.maxDistanceKm = maxDistanceKm;
         params.lat = newLatLng.lat;
         params.lng = newLatLng.lng;
@@ -99,7 +101,7 @@ export default function WholesaleProducts() {
     return () => {
       window.removeEventListener('userLogin', handleUserLogin);
     };
-  }, [loadUserProfile, fetchProducts, q, minPrice, maxPrice, sort, maxDistanceKm]);
+  }, [loadUserProfile, fetchProducts, q, minPrice, maxPrice, sort, category, maxDistanceKm]);
 
   // Initial fetch on mount
   useEffect(() => {
@@ -121,6 +123,7 @@ export default function WholesaleProducts() {
     if (minPrice) params.minPrice = minPrice;
     if (maxPrice) params.maxPrice = maxPrice;
     if (sort) params.sort = sort;
+    if (category && category !== 'all') params.category = category;
     if (maxDistanceKm) params.maxDistanceKm = maxDistanceKm;
     if (latLng) {
       params.lat = latLng.lat;
@@ -129,7 +132,7 @@ export default function WholesaleProducts() {
     
     // Use debounced search for filter changes
     debouncedSearch(params);
-  }, [q, minPrice, maxPrice, sort, maxDistanceKm, latLng, debouncedSearch]);
+  }, [q, minPrice, maxPrice, sort, category, maxDistanceKm, latLng, debouncedSearch]);
 
   const useMyLocation = async () => {
     navigator.geolocation.getCurrentPosition(
@@ -151,6 +154,18 @@ export default function WholesaleProducts() {
       },
       () => alert("Failed to access location")
     );
+  };
+
+  const addToRetailerList = async (productId) => {
+    try {
+      const res = await api.post(`/products/${productId}/add-to-retailer-list`, {}, {
+        headers: authHeader()
+      });
+      alert(res.data.message || "Product added to your product list!");
+    } catch (err) {
+      console.error("Failed to add product to list:", err);
+      alert(err.response?.data?.error || "Failed to add product to your list. Please try again.");
+    }
   };
 
   const addToWholesaleCart = (productId) => {
@@ -259,6 +274,25 @@ export default function WholesaleProducts() {
           type="number"
           style={{ maxWidth: 140 }}
         />
+
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          style={{ maxWidth: 200 }}
+        >
+          <option value="all">All Categories</option>
+          <option value="Electronics">Electronics</option>
+          <option value="Fashion and Apparel">Fashion and Apparel</option>
+          <option value="Home Goods">Home Goods</option>
+          <option value="Beauty and Personal Care">Beauty and Personal Care</option>
+          <option value="Food and Beverages">Food and Beverages</option>
+          <option value="Toys and Hobbies">Toys and Hobbies</option>
+          <option value="Health and Wellness">Health and Wellness</option>
+          <option value="Pet Supplies">Pet Supplies</option>
+          <option value="DIY and Hardware">DIY and Hardware</option>
+          <option value="Media">Media</option>
+          <option value="Others">Others</option>
+        </select>
 
         <select
           value={sort}
@@ -399,27 +433,48 @@ export default function WholesaleProducts() {
                   const multiples = p.multiples || 1;
                   const totalUnits = p.stock * multiples;
                   return (
-                    <p style={{ margin: "4px 0", fontSize: "14px", color: "#666" }}>
-                      <strong>Stock:</strong> {totalUnits} units
-                      {multiples > 1 && (
-                        <span style={{ marginLeft: "4px", fontSize: "12px", color: "#999" }}>
-                          ({p.stock} multiple{p.stock !== 1 ? 's' : ''})
-                        </span>
-                      )}
-                      {p.stock <= 0 && (
-                        <span style={{
-                          marginLeft: "8px",
-                          fontSize: "12px",
-                          color: "#dc2626",
-                          fontWeight: "600",
-                          backgroundColor: "#fee2e2",
-                          padding: "2px 8px",
-                          borderRadius: "4px"
+                    <>
+                      <p style={{ margin: "4px 0", fontSize: "14px", color: "#666" }}>
+                        <strong>Stock:</strong> {totalUnits} units
+                        {multiples > 1 && (
+                          <span style={{ marginLeft: "4px", fontSize: "12px", color: "#999" }}>
+                            ({p.stock} multiple{p.stock !== 1 ? 's' : ''})
+                          </span>
+                        )}
+                        {p.stock <= 0 && (
+                          <span style={{
+                            marginLeft: "8px",
+                            fontSize: "12px",
+                            color: "#dc2626",
+                            fontWeight: "600",
+                            backgroundColor: "#fee2e2",
+                            padding: "2px 8px",
+                            borderRadius: "4px"
+                          }}>
+                            OUT OF STOCK
+                          </span>
+                        )}
+                      </p>
+                      {/* Availability Date (shown when out of stock) */}
+                      {p.stock <= 0 && p.availabilityDate && (
+                        <p style={{ 
+                          margin: "4px 0", 
+                          fontSize: "13px", 
+                          color: "#059669",
+                          fontWeight: "500",
+                          backgroundColor: "#d1fae5",
+                          padding: "6px 10px",
+                          borderRadius: "6px",
+                          display: "inline-block"
                         }}>
-                          OUT OF STOCK
-                        </span>
+                          📅 Back in stock: {new Date(p.availabilityDate).toLocaleDateString('en-US', { 
+                            year: 'numeric', 
+                            month: 'long', 
+                            day: 'numeric' 
+                          })}
+                        </p>
                       )}
-                    </p>
+                    </>
                   );
                 })()}
 
@@ -500,35 +555,59 @@ export default function WholesaleProducts() {
                     </p>
                   )}
                   </div>
-                  <button 
-                    onClick={() => addToWholesaleCart(p.id)}
-                    disabled={p.stock !== undefined && p.stock !== null && p.stock <= 0}
-                    style={{
-                      flex: 1,
-                      padding: "8px 16px",
-                      backgroundColor: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "#9ca3af" : "#3399cc",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "6px",
-                      cursor: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "not-allowed" : "pointer",
-                      fontSize: "14px",
-                      fontWeight: "600",
-                      transition: "background 0.2s",
-                      opacity: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? 0.6 : 1
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!(p.stock !== undefined && p.stock !== null && p.stock <= 0)) {
-                        e.target.style.backgroundColor = "#2a7ba0";
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!(p.stock !== undefined && p.stock !== null && p.stock <= 0)) {
-                        e.target.style.backgroundColor = "#3399cc";
-                      }
-                    }}
-                  >
-                    {(p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "Out of Stock" : "Add to Cart"}
-                  </button>
+                  <div style={{ display: "flex", gap: "8px", width: "100%" }}>
+                    <button 
+                      onClick={() => addToRetailerList(p.id)}
+                      style={{
+                        padding: "8px 12px",
+                        backgroundColor: "#22c55e",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "6px",
+                        cursor: "pointer",
+                        fontSize: "12px",
+                        fontWeight: "600",
+                        transition: "background 0.2s",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                      }}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = "#16a34a"}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = "#22c55e"}
+                      title="Add to My Products List"
+                    >
+                      +
+                    </button>
+                    <button 
+                      onClick={() => addToWholesaleCart(p.id)}
+                      disabled={p.stock !== undefined && p.stock !== null && p.stock <= 0}
+                      style={{
+                        flex: 1,
+                        padding: "8px 16px",
+                        backgroundColor: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "#9ca3af" : "#3399cc",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "6px",
+                        cursor: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "not-allowed" : "pointer",
+                        fontSize: "14px",
+                        fontWeight: "600",
+                        transition: "background 0.2s",
+                        opacity: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? 0.6 : 1
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!(p.stock !== undefined && p.stock !== null && p.stock <= 0)) {
+                          e.target.style.backgroundColor = "#2a7ba0";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!(p.stock !== undefined && p.stock !== null && p.stock <= 0)) {
+                          e.target.style.backgroundColor = "#3399cc";
+                        }
+                      }}
+                    >
+                      {(p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "Out of Stock" : "Add to Cart"}
+                    </button>
+                  </div>
                 </div>
                 {p.multiples && p.multiples > 1 && (
                   <p style={{ margin: "4px 0", fontSize: "11px", color: "#6b7280", width: "100%" }}>

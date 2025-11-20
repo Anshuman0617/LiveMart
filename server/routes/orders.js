@@ -189,6 +189,65 @@ router.put('/:orderId/status', authMiddleware, async (req, res) => {
     order.status = status;
     await order.save();
 
+    // If order is marked as delivered and the seller is a wholesaler,
+    // automatically create/update retailer products for the buyer (retailer)
+    if (status === 'delivered' && req.user.role === 'wholesaler') {
+      try {
+        const buyer = await User.findByPk(order.userId);
+        
+        // Only process if buyer is a retailer
+        if (buyer && buyer.role === 'retailer') {
+          for (const item of order.items) {
+            if (item.product && item.product.ownerType === 'wholesaler') {
+              // Reload product to ensure we have the multiples field
+              const wholesalerProduct = await Product.findByPk(item.productId);
+              if (!wholesalerProduct) continue;
+              
+              // Convert quantity from multiples to individual units
+              // item.quantity is in multiples (number of multiples ordered)
+              // wholesalerProduct.multiples is the size of each multiple
+              const quantityInUnits = item.quantity * (wholesalerProduct.multiples || 1);
+              
+              // Find or create retailer product using sourceProductId for reliable matching
+              // This ensures matching works even if retailer edits title/description
+              let retailerProduct = await Product.findOne({
+                where: {
+                  ownerId: buyer.id,
+                  ownerType: 'retailer',
+                  sourceProductId: wholesalerProduct.id
+                }
+              });
+
+              if (retailerProduct) {
+                // Update existing product: increase stock
+                // Note: Retailer can edit title, description, price, etc., but stock will still update correctly
+                retailerProduct.stock = (retailerProduct.stock || 0) + quantityInUnits;
+                await retailerProduct.save();
+              } else {
+                // Create new retailer product (in case retailer didn't add it manually first)
+                retailerProduct = await Product.create({
+                  title: wholesalerProduct.title,
+                  description: wholesalerProduct.description,
+                  price: wholesalerProduct.price, // Retailer can adjust later
+                  stock: quantityInUnits, // Stock in individual units
+                  multiples: 1, // Retailer products sell individual units
+                  discount: 0,
+                  images: wholesalerProduct.images || [],
+                  imageUrl: wholesalerProduct.imageUrl,
+                  ownerId: buyer.id,
+                  ownerType: 'retailer',
+                  sourceProductId: wholesalerProduct.id // Track source for future deliveries
+                });
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error auto-creating retailer products on delivery:', err);
+        // Don't fail the order update if product creation fails
+      }
+    }
+
     res.json({ success: true, order });
   } catch (err) {
     console.error('Update order status error:', err);

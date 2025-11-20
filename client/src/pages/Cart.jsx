@@ -87,29 +87,38 @@ export default function Cart() {
   }, [loadCart]); // Include loadCart in dependencies
   
   // Load user's saved address and details
-  useEffect(() => {
-    const loadUserDetails = async () => {
-      try {
-        const res = await api.get("/users/me");
-        const user = res.data;
-        if (user.address) {
-          setUserAddress(user.address);
-        }
-        if (user.phone) {
-          setUserPhone(user.phone);
-        }
-        if (user.name) {
-          setFirstName(user.name);
-        }
-        if (user.email) {
-          setEmail(user.email);
-        }
-      } catch (err) {
-        // User not logged in or error - that's okay
-        console.log("Could not load user details:", err);
+  const loadUserDetails = React.useCallback(async () => {
+    try {
+      const res = await api.get("/users/me");
+      const user = res.data;
+      if (user.address) {
+        setUserAddress(user.address);
       }
-    };
+      if (user.phone) {
+        setUserPhone(user.phone);
+      }
+      if (user.name) {
+        setFirstName(user.name);
+      }
+      if (user.email) {
+        setEmail(user.email);
+      }
+    } catch (err) {
+      // User not logged in or error - that's okay
+      console.log("Could not load user details:", err);
+    }
+  }, []);
+
+  useEffect(() => {
     loadUserDetails();
+
+    // Listen for userLogin event to reload user details when profile is updated
+    const handleUserUpdate = () => {
+      loadUserDetails();
+    };
+
+    window.addEventListener('userLogin', handleUserUpdate);
+    window.addEventListener('userLogout', handleUserUpdate);
 
     // Load user orders
     const loadOrders = async () => {
@@ -127,7 +136,12 @@ export default function Cart() {
       }
     };
     loadOrders();
-  }, []);
+
+    return () => {
+      window.removeEventListener('userLogin', handleUserUpdate);
+      window.removeEventListener('userLogout', handleUserUpdate);
+    };
+  }, [loadUserDetails]);
 
   const updateCart = async (c, skipReload = false) => {
     setCart(c);

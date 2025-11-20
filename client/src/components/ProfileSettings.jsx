@@ -94,9 +94,8 @@ export default function ProfileSettings({ user, onClose, onSave, forceOpen = fal
       // For regular users, parse into three fields
       const addressComponents = place.address_components || [];
       
-      // Extract components
-      let streetNumber = '';
-      let route = '';
+      // Extract components - collect everything that would go in first field
+      const firstFieldComponents = []; // These will be moved to second field
       let sublocality = '';
       let locality = '';
       let city = '';
@@ -105,10 +104,12 @@ export default function ProfileSettings({ user, onClose, onSave, forceOpen = fal
 
       addressComponents.forEach(component => {
         const types = component.types;
-        if (types.includes('street_number')) {
-          streetNumber = component.long_name;
-        } else if (types.includes('route')) {
-          route = component.long_name;
+        // Collect all components that typically go in first field (house/flat number)
+        if (types.includes('street_number') || 
+            types.includes('route') || 
+            types.includes('subpremise') || // Apartment/unit number
+            types.includes('premise')) { // Building name
+          firstFieldComponents.push(component.long_name);
         } else if (types.includes('sublocality') || types.includes('sublocality_level_1')) {
           sublocality = component.long_name;
         } else if (types.includes('locality')) {
@@ -124,22 +125,27 @@ export default function ProfileSettings({ user, onClose, onSave, forceOpen = fal
 
       // Build address fields
       // Don't auto-fill houseFlat (first field) - user must enter manually
-      // Move street number and route to locality field (second field) instead of discarding
+      // Move ALL first field components to locality field (second field)
       // Only auto-fill the last 2 fields: locality and cityPin
-      const streetInfo = [streetNumber, route].filter(Boolean).join(' ').trim();
+      const firstFieldInfo = firstFieldComponents.filter(Boolean).join(' ').trim();
+      
       const localityParts = [];
-      if (streetInfo) {
-        localityParts.push(streetInfo);
+      // Always add first field components first if they exist
+      if (firstFieldInfo && firstFieldInfo.length > 0) {
+        localityParts.push(firstFieldInfo);
       }
-      if (sublocality) {
+      // Then add sublocality or locality
+      if (sublocality && sublocality.trim()) {
         localityParts.push(sublocality);
-      } else if (locality) {
+      } else if (locality && locality.trim()) {
         localityParts.push(locality);
       }
-      const localityValue = localityParts.join(', ') || '';
+      
+      const localityValue = localityParts.length > 0 ? localityParts.join(', ') : '';
       const cityPinValue = [city || locality, state, postalCode].filter(Boolean).join(', ');
 
       // Leave houseFlat unchanged (user enters manually)
+      // Always set the values to ensure they update properly
       setLocality(localityValue);
       setCityPin(cityPinValue);
     }

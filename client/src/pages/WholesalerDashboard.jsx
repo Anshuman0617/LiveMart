@@ -11,6 +11,7 @@ export default function WholesalerDashboard() {
   const [editing, setEditing] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [category, setCategory] = useState("all");
 
   const fetchProducts = async () => {
     try {
@@ -32,8 +33,15 @@ export default function WholesalerDashboard() {
 
   // Filter and search function (without discount filter)
   const filterAndSearch = useCallback(
-    debounce((query, productList) => {
+    debounce((query, productList, categoryFilter) => {
       let filtered = productList;
+
+      // Apply category filter first
+      if (categoryFilter && categoryFilter !== 'all') {
+        filtered = filtered.filter((product) => {
+          return product.category === categoryFilter;
+        });
+      }
 
       // Apply search query
       if (query.trim()) {
@@ -53,8 +61,8 @@ export default function WholesalerDashboard() {
   );
 
   useEffect(() => {
-    filterAndSearch(searchQuery, products);
-  }, [searchQuery, products, filterAndSearch]);
+    filterAndSearch(searchQuery, products, category);
+  }, [searchQuery, products, category, filterAndSearch]);
 
   const createProduct = async (data) => {
     try {
@@ -225,6 +233,38 @@ export default function WholesalerDashboard() {
           onFocus={(e) => e.target.style.borderColor = "#3399cc"}
           onBlur={(e) => e.target.style.borderColor = "#d1d5db"}
         />
+        
+        {/* Category Filter */}
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          style={{
+            padding: "12px 16px",
+            fontSize: "16px",
+            border: "1px solid #d1d5db",
+            borderRadius: "8px",
+            cursor: "pointer",
+            backgroundColor: "white",
+            transition: "border-color 0.2s",
+            boxSizing: "border-box",
+            minWidth: "180px"
+          }}
+          onFocus={(e) => e.target.style.borderColor = "#3399cc"}
+          onBlur={(e) => e.target.style.borderColor = "#d1d5db"}
+        >
+          <option value="all">All Categories</option>
+          <option value="Electronics">Electronics</option>
+          <option value="Fashion and Apparel">Fashion and Apparel</option>
+          <option value="Home Goods">Home Goods</option>
+          <option value="Beauty and Personal Care">Beauty and Personal Care</option>
+          <option value="Food and Beverages">Food and Beverages</option>
+          <option value="Toys and Hobbies">Toys and Hobbies</option>
+          <option value="Health and Wellness">Health and Wellness</option>
+          <option value="Pet Supplies">Pet Supplies</option>
+          <option value="DIY and Hardware">DIY and Hardware</option>
+          <option value="Media">Media</option>
+          <option value="Others">Others</option>
+        </select>
       </div>
 
       {filteredProducts.length === 0 && products.length === 0 && <p>No products yet. Create your first product above.</p>}

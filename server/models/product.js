@@ -18,7 +18,26 @@ export default (sequelize) => {
     lng: { type: DataTypes.DECIMAL(10,7), allowNull: true },
     ratingAvg: { type: DataTypes.FLOAT, defaultValue: 0.0 },
     reviewsCount: { type: DataTypes.INTEGER, defaultValue: 0 },
-    multiples: { type: DataTypes.INTEGER, defaultValue: 1, allowNull: false } // Minimum order quantity multiple (for wholesalers)
+    multiples: { type: DataTypes.INTEGER, defaultValue: 1, allowNull: false }, // Minimum order quantity multiple (for wholesalers)
+    sourceProductId: { type: DataTypes.INTEGER, allowNull: true }, // ID of the wholesaler product this retailer product was created from
+    category: { 
+      type: DataTypes.ENUM(
+        'Electronics',
+        'Fashion and Apparel',
+        'Home Goods',
+        'Beauty and Personal Care',
+        'Food and Beverages',
+        'Toys and Hobbies',
+        'Health and Wellness',
+        'Pet Supplies',
+        'DIY and Hardware',
+        'Media',
+        'Others'
+      ), 
+      defaultValue: 'Others',
+      allowNull: false
+    },
+    availabilityDate: { type: DataTypes.DATEONLY, allowNull: true } // Date when out-of-stock item will be back in stock
   }, {
     tableName: 'products',
     timestamps: true

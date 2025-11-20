@@ -25,8 +25,10 @@ export default function Products() {
   const [q, setQ] = useState("");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
-  const [maxDistanceKm, setMaxDistanceKm] = useState(45); // Default 45km
+  const [maxDistanceKm, setMaxDistanceKm] = useState(45); // Default 45km (used for API calls)
+  const [maxDistanceDisplay, setMaxDistanceDisplay] = useState("45"); // Display value (can be cleared)
   const [sort, setSort] = useState("");
+  const [category, setCategory] = useState("all");
 
   const [latLng, setLatLng] = useState(null);
   const hasInitiallyFetchedRef = useRef(false);
@@ -98,6 +100,7 @@ export default function Products() {
         if (minPrice) params.minPrice = minPrice;
         if (maxPrice) params.maxPrice = maxPrice;
         if (sort) params.sort = sort;
+        if (category && category !== 'all') params.category = category;
         params.lat = newLatLng.lat;
         params.lng = newLatLng.lng;
         params.maxDistanceKm = maxDistanceKm || 45; // Default 45km
@@ -109,7 +112,7 @@ export default function Products() {
     return () => {
       window.removeEventListener('userLogin', handleUserLogin);
     };
-  }, [loadUserProfile, fetchProducts, q, minPrice, maxPrice, sort, maxDistanceKm]);
+    }, [loadUserProfile, fetchProducts, q, minPrice, maxPrice, sort, category, maxDistanceKm]);
 
   // Initial fetch on mount
   useEffect(() => {
@@ -151,6 +154,7 @@ export default function Products() {
     if (minPrice) params.minPrice = minPrice;
     if (maxPrice) params.maxPrice = maxPrice;
     if (sort) params.sort = sort;
+    if (category && category !== 'all') params.category = category;
     if (latLng) {
       params.lat = latLng.lat;
       params.lng = latLng.lng;
@@ -160,7 +164,7 @@ export default function Products() {
     
     // Use debounced search for filter changes
     debouncedSearch(params);
-  }, [q, minPrice, maxPrice, sort, maxDistanceKm, latLng, debouncedSearch]);
+  }, [q, minPrice, maxPrice, sort, category, maxDistanceKm, latLng, debouncedSearch]);
 
   const useMyLocation = async () => {
     navigator.geolocation.getCurrentPosition(
@@ -190,60 +194,238 @@ export default function Products() {
       <h1>Products</h1>
 
       {/* Filters */}
-      <div className="row" style={{ marginBottom: 20 }}>
-        <input
-          placeholder="Search..."
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          style={{ maxWidth: 300 }}
-        />
+      <div style={{ 
+        display: "flex", 
+        flexWrap: "wrap", 
+        gap: "16px", 
+        marginBottom: 20,
+        alignItems: "flex-end"
+      }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+          <label style={{ fontSize: "14px", fontWeight: 500, color: "#374151", lineHeight: "20px", height: "20px" }}>
+            Search
+          </label>
+          <input
+            placeholder="Search products..."
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            style={{ 
+              maxWidth: 300,
+              height: "36px",
+              padding: "8px 12px",
+              border: "1px solid #ddd",
+              borderRadius: "6px",
+              fontSize: "14px",
+              boxSizing: "border-box"
+            }}
+          />
+        </div>
 
-        <input
-          placeholder="Min Price"
-          value={minPrice}
-          onChange={(e) => setMinPrice(e.target.value)}
-          type="number"
-          style={{ maxWidth: 140 }}
-        />
+        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+          <label style={{ fontSize: "14px", fontWeight: 500, color: "#374151", lineHeight: "20px", height: "20px" }}>
+            Min Price (₹)
+          </label>
+          <input
+            placeholder="Min"
+            value={minPrice}
+            onChange={(e) => setMinPrice(e.target.value)}
+            type="number"
+            min="0"
+            style={{ 
+              maxWidth: 140,
+              height: "36px",
+              padding: "8px 12px",
+              border: "1px solid #ddd",
+              borderRadius: "6px",
+              fontSize: "14px",
+              boxSizing: "border-box"
+            }}
+          />
+        </div>
 
-        <input
-          placeholder="Max Price"
-          value={maxPrice}
-          onChange={(e) => setMaxPrice(e.target.value)}
-          type="number"
-          style={{ maxWidth: 140 }}
-        />
+        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+          <label style={{ fontSize: "14px", fontWeight: 500, color: "#374151", lineHeight: "20px", height: "20px" }}>
+            Max Price (₹)
+          </label>
+          <input
+            placeholder="Max"
+            value={maxPrice}
+            onChange={(e) => setMaxPrice(e.target.value)}
+            type="number"
+            min="0"
+            style={{ 
+              maxWidth: 140,
+              height: "36px",
+              padding: "8px 12px",
+              border: "1px solid #ddd",
+              borderRadius: "6px",
+              fontSize: "14px",
+              boxSizing: "border-box"
+            }}
+          />
+        </div>
 
-        <select
-          value={sort}
-          onChange={(e) => setSort(e.target.value)}
-          style={{ maxWidth: 150 }}
-        >
-          <option value="">Sort</option>
-          <option value="price_asc">Price ↑</option>
-          <option value="price_desc">Price ↓</option>
-          <option value="most_sold">Most Sold</option>
-          <option value="distance">Closest</option>
-        </select>
-      </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+          <label style={{ fontSize: "14px", fontWeight: 500, color: "#374151", lineHeight: "20px", height: "20px" }}>
+            Category
+          </label>
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            style={{ 
+              maxWidth: 200,
+              height: "36px",
+              padding: "8px 12px",
+              border: "1px solid #ddd",
+              borderRadius: "6px",
+              fontSize: "14px",
+              cursor: "pointer",
+              boxSizing: "border-box"
+            }}
+          >
+            <option value="all">All Categories</option>
+            <option value="Electronics">Electronics</option>
+            <option value="Fashion and Apparel">Fashion and Apparel</option>
+            <option value="Home Goods">Home Goods</option>
+            <option value="Beauty and Personal Care">Beauty and Personal Care</option>
+            <option value="Food and Beverages">Food and Beverages</option>
+            <option value="Toys and Hobbies">Toys and Hobbies</option>
+            <option value="Health and Wellness">Health and Wellness</option>
+            <option value="Pet Supplies">Pet Supplies</option>
+            <option value="DIY and Hardware">DIY and Hardware</option>
+            <option value="Media">Media</option>
+            <option value="Others">Others</option>
+          </select>
+        </div>
 
-      {/* Location */}
-      <div className="row" style={{ marginBottom: 20, flexWrap: "wrap", gap: "8px" }}>
-        <button onClick={useMyLocation}>Use My Location</button>
+        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+          <label style={{ fontSize: "14px", fontWeight: 500, color: "#374151", lineHeight: "20px", height: "20px" }}>
+            Sort By
+          </label>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+            style={{ 
+              maxWidth: 150,
+              height: "36px",
+              padding: "8px 12px",
+              border: "1px solid #ddd",
+              borderRadius: "6px",
+              fontSize: "14px",
+              cursor: "pointer",
+              boxSizing: "border-box"
+            }}
+          >
+            <option value="">None</option>
+            <option value="price_asc">Price ↑</option>
+            <option value="price_desc">Price ↓</option>
+            <option value="most_sold">Most Sold</option>
+            <option value="distance">Closest</option>
+          </select>
+        </div>
 
-        <input
-          placeholder="Max Distance (km)"
-          value={maxDistanceKm}
-          onChange={(e) => setMaxDistanceKm(e.target.value ? Number(e.target.value) : 45)}
-          type="number"
-          min="1"
-          style={{ maxWidth: 150 }}
-        />
+        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+          <label style={{ fontSize: "14px", fontWeight: 500, color: "#374151", lineHeight: "20px", height: "20px" }}>
+            Location
+          </label>
+          <button 
+            onClick={useMyLocation}
+            style={{
+              height: "36px",
+              padding: "8px 16px",
+              backgroundColor: "#3399cc",
+              color: "white",
+              border: "none",
+              borderRadius: "6px",
+              fontSize: "14px",
+              cursor: "pointer",
+              fontWeight: 500,
+              whiteSpace: "nowrap",
+              boxSizing: "border-box"
+            }}
+            onMouseEnter={(e) => e.target.style.backgroundColor = "#2a7ba0"}
+            onMouseLeave={(e) => e.target.style.backgroundColor = "#3399cc"}
+          >
+            Use My Location
+          </button>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "4px", position: "relative" }}>
+          <label style={{ fontSize: "14px", fontWeight: 500, color: "#374151", lineHeight: "20px", height: "20px" }}>
+            Max Distance (km)
+          </label>
+          <input
+            placeholder="45"
+            value={maxDistanceDisplay}
+            onChange={(e) => {
+              const value = e.target.value;
+              // Allow empty string or digits only
+              if (value === '' || /^\d+$/.test(value)) {
+                setMaxDistanceDisplay(value);
+                // Update the actual filter value (use 45 if empty)
+                if (value === '') {
+                  setMaxDistanceKm(45);
+                } else {
+                  const numValue = Number(value);
+                  // Enforce maximum of 75km and minimum of 1km
+                  if (numValue > 75) {
+                    setMaxDistanceKm(75);
+                    setMaxDistanceDisplay("75");
+                  } else if (numValue < 1) {
+                    setMaxDistanceKm(1);
+                    setMaxDistanceDisplay("1");
+                  } else {
+                    setMaxDistanceKm(numValue);
+                  }
+                }
+              }
+            }}
+            onBlur={(e) => {
+              // When field loses focus, if empty, reset to 45
+              if (e.target.value === '') {
+                setMaxDistanceDisplay("45");
+                setMaxDistanceKm(45);
+              } else {
+                const numValue = Number(e.target.value);
+                if (numValue < 1) {
+                  setMaxDistanceDisplay("1");
+                  setMaxDistanceKm(1);
+                } else if (numValue > 75) {
+                  setMaxDistanceDisplay("75");
+                  setMaxDistanceKm(75);
+                }
+              }
+            }}
+            type="text"
+            inputMode="numeric"
+            style={{ 
+              maxWidth: 150,
+              height: "36px",
+              padding: "8px 12px",
+              border: "1px solid #ddd",
+              borderRadius: "6px",
+              fontSize: "14px",
+              boxSizing: "border-box"
+            }}
+          />
+          <span style={{ fontSize: "12px", color: "#6b7280", position: "absolute", top: "60px", whiteSpace: "nowrap" }}>
+            Range: 1-75 km (default: 45 km)
+          </span>
+        </div>
         
         {latLng && latLng.lat != null && latLng.lng != null && (
-          <p style={{ margin: 0, color: "#666", fontSize: "0.9em", alignSelf: "center" }}>
-            📍 Location set: {Number(latLng.lat).toFixed(4)}, {Number(latLng.lng).toFixed(4)}
-          </p>
+          <div style={{ 
+            display: "flex", 
+            flexDirection: "column",
+            justifyContent: "flex-end"
+          }}>
+            <label style={{ fontSize: "14px", fontWeight: 500, color: "#374151", lineHeight: "20px", height: "20px", opacity: 0 }}>
+              &nbsp;
+            </label>
+            <p style={{ margin: 0, color: "#666", fontSize: "0.9em", height: "36px", display: "flex", alignItems: "center" }}>
+              📍 Location: {Number(latLng.lat).toFixed(4)}, {Number(latLng.lng).toFixed(4)}
+            </p>
+          </div>
         )}
       </div>
 
@@ -441,6 +623,26 @@ export default function Products() {
                         OUT OF STOCK
                       </span>
                     )}
+                  </p>
+                )}
+
+                {/* Availability Date (shown when out of stock) */}
+                {p.stock !== undefined && p.stock !== null && p.stock <= 0 && p.availabilityDate && (
+                  <p style={{ 
+                    margin: "4px 0", 
+                    fontSize: "13px", 
+                    color: "#059669",
+                    fontWeight: "500",
+                    backgroundColor: "#d1fae5",
+                    padding: "6px 10px",
+                    borderRadius: "6px",
+                    display: "inline-block"
+                  }}>
+                    📅 Back in stock: {new Date(p.availabilityDate).toLocaleDateString('en-US', { 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric' 
+                    })}
                   </p>
                 )}
 

@@ -15,6 +15,10 @@ export default function ProductForm({
   const [discount, setDiscount] = useState(initial.discount || "");
   const [stock, setStock] = useState(initial.stock || 0);
   const [multiples, setMultiples] = useState(initial.multiples || 1);
+  const [category, setCategory] = useState(initial.category || "Others");
+  const [availabilityDate, setAvailabilityDate] = useState(
+    initial.availabilityDate ? initial.availabilityDate.split('T')[0] : ""
+  );
 
   const [images, setImages] = useState([]);
   const [existingImages, setExistingImages] = useState(initial.images || []);
@@ -105,6 +109,8 @@ export default function ProductForm({
       description,
       price,
       stock,
+      category: category || "Others",
+      availabilityDate: availabilityDate || null,
       // Note: Products now use owner's address, not product-specific address
       images,
     };
@@ -238,6 +244,86 @@ export default function ProductForm({
               onFocus={(e) => e.target.style.borderColor = "#3399cc"}
               onBlur={(e) => e.target.style.borderColor = "#d1d5db"}
             />
+          </div>
+
+          {/* Category */}
+          <div>
+            <label style={{ 
+              display: "block", 
+              marginBottom: "8px", 
+              fontSize: "14px", 
+              fontWeight: "600",
+              color: "#374151"
+            }}>
+              Category <span style={{ color: "#dc2626" }}>*</span>
+            </label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              required
+              style={{
+                width: "100%",
+                padding: "12px",
+                fontSize: "16px",
+                border: "1px solid #d1d5db",
+                borderRadius: "8px",
+                transition: "border-color 0.2s",
+                boxSizing: "border-box",
+                cursor: "pointer",
+                backgroundColor: "white"
+              }}
+              onFocus={(e) => e.target.style.borderColor = "#3399cc"}
+              onBlur={(e) => e.target.style.borderColor = "#d1d5db"}
+            >
+              <option value="Electronics">Electronics</option>
+              <option value="Fashion and Apparel">Fashion and Apparel</option>
+              <option value="Home Goods">Home Goods</option>
+              <option value="Beauty and Personal Care">Beauty and Personal Care</option>
+              <option value="Food and Beverages">Food and Beverages</option>
+              <option value="Toys and Hobbies">Toys and Hobbies</option>
+              <option value="Health and Wellness">Health and Wellness</option>
+              <option value="Pet Supplies">Pet Supplies</option>
+              <option value="DIY and Hardware">DIY and Hardware</option>
+              <option value="Media">Media</option>
+              <option value="Others">Others</option>
+            </select>
+          </div>
+
+          {/* Availability Date (for out of stock items) */}
+          <div>
+            <label style={{ 
+              display: "block", 
+              marginBottom: "8px", 
+              fontSize: "14px", 
+              fontWeight: "600",
+              color: "#374151"
+            }}>
+              Availability Date (if out of stock)
+            </label>
+            <input
+              type="date"
+              value={availabilityDate}
+              onChange={(e) => setAvailabilityDate(e.target.value)}
+              min={new Date().toISOString().split('T')[0]}
+              style={{
+                width: "100%",
+                padding: "12px",
+                fontSize: "16px",
+                border: "1px solid #d1d5db",
+                borderRadius: "8px",
+                transition: "border-color 0.2s",
+                boxSizing: "border-box"
+              }}
+              onFocus={(e) => e.target.style.borderColor = "#3399cc"}
+              onBlur={(e) => e.target.style.borderColor = "#d1d5db"}
+            />
+            <p style={{ 
+              margin: "4px 0 0 0", 
+              fontSize: "12px", 
+              color: "#6b7280"
+            }}>
+              Set when this item will be back in stock (only shown when stock is 0)
+            </p>
           </div>
 
           {/* Price and Stock Row */}
@@ -691,6 +777,8 @@ export default function ProductForm({
                 setDiscount(initial.discount || "");
                 setStock(initial.stock || 0);
                 setMultiples(initial.multiples || 1);
+                setCategory(initial.category || "Others");
+                setAvailabilityDate(initial.availabilityDate ? initial.availabilityDate.split('T')[0] : "");
                 setImages([]);
                 setPreviewImages([]);
                 if (onProductUpdate) {

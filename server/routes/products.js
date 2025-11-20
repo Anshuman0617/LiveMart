@@ -37,11 +37,17 @@ router.get('/', authMiddleware, async (req, res) => {
       lng,
       maxDistanceKm,
       ownerType,
+      category,
       page = 1,
       pageSize = 50,
     } = req.query;
 
     const where = {};
+
+    // Filter by category if provided
+    if (category && category !== 'all') {
+      where.category = category;
+    }
 
     // Filter by ownerType if explicitly requested
     if (ownerType === 'retailer' || ownerType === 'wholesaler') {
@@ -226,7 +232,7 @@ router.post(
   upload.array('images', 6),
   async (req, res) => {
     try {
-      const { title, description, price, stock, multiples } = req.body;
+      const { title, description, price, stock, multiples, category, availabilityDate } = req.body;
 
       // Validate: Sellers must have address
       if (!req.user.address || !req.user.lat || !req.user.lng) {
@@ -247,6 +253,8 @@ router.post(
         price,
         stock,
         multiples: multiples ? parseInt(multiples) : 1, // Default to 1 if not provided
+        category: category || 'Others', // Default to 'Others' if not provided
+        availabilityDate: availabilityDate || null, // Date when out-of-stock item will be back
         images,
         imageUrl,
         ownerId: req.user.id,
@@ -290,6 +298,26 @@ router.put(
         payload.multiples = parseInt(payload.multiples) || 1;
         if (payload.multiples < 1) {
           payload.multiples = 1;
+        }
+      }
+
+      // Handle category - default to 'Others' if not provided or invalid
+      if (payload.category !== undefined) {
+        const validCategories = [
+          'Electronics',
+          'Fashion and Apparel',
+          'Home Goods',
+          'Beauty and Personal Care',
+          'Food and Beverages',
+          'Toys and Hobbies',
+          'Health and Wellness',
+          'Pet Supplies',
+          'DIY and Hardware',
+          'Media',
+          'Others'
+        ];
+        if (!validCategories.includes(payload.category)) {
+          payload.category = 'Others';
         }
       }
 
@@ -425,6 +453,72 @@ router.post('/:id/buy-from-wholesaler',
       });
     } catch (err) {
       console.error("BUY WHOLESALE ERROR:", err);
+      res.status(500).json({ error: "Server error" });
+    }
+  }
+);
+
+// ---------- ADD WHOLESALER PRODUCT TO RETAILER'S PRODUCT LIST ----------
+// This creates a product in the retailer's list based on a wholesaler product
+// The product will have stock=0 initially, and stock will increase when orders are delivered
+router.post(
+  '/:id/add-to-retailer-list',
+  authMiddleware,
+  requireRole(['retailer']),
+  async (req, res) => {
+    try {
+      const wholesalerProduct = await Product.findByPk(req.params.id, {
+        include: [
+          { model: User, as: 'owner', attributes: ['id', 'name', 'role'] }
+        ]
+      });
+
+      if (!wholesalerProduct) {
+        return res.status(404).json({ error: 'Product not found' });
+      }
+
+      if (wholesalerProduct.ownerType !== 'wholesaler') {
+        return res.status(400).json({ error: 'This product is not a wholesaler product' });
+      }
+
+      // Check if retailer already has this product (by sourceProductId for reliable matching)
+      const existingProduct = await Product.findOne({
+        where: {
+          ownerId: req.user.id,
+          ownerType: 'retailer',
+          sourceProductId: wholesalerProduct.id
+        }
+      });
+
+      if (existingProduct) {
+        return res.json({ 
+          message: 'Product already in your list',
+          product: existingProduct 
+        });
+      }
+
+      // Create retailer product based on wholesaler product
+      // Convert from multiples to individual units (multiples = 1 for retailer products)
+      const retailerProduct = await Product.create({
+        title: wholesalerProduct.title,
+        description: wholesalerProduct.description,
+        price: wholesalerProduct.price, // Retailer can adjust price later
+        stock: 0, // Initial stock is 0, will increase when orders are delivered
+        multiples: 1, // Retailer products sell individual units, not multiples
+        discount: 0, // Retailer can set discount later
+        images: wholesalerProduct.images || [],
+        imageUrl: wholesalerProduct.imageUrl,
+        ownerId: req.user.id,
+        ownerType: 'retailer',
+        sourceProductId: wholesalerProduct.id // Track which wholesaler product this came from
+      });
+
+      res.json({ 
+        message: 'Product added to your list',
+        product: retailerProduct 
+      });
+    } catch (err) {
+      console.error("ADD TO RETAILER LIST ERROR:", err);
       res.status(500).json({ error: "Server error" });
     }
   }

@@ -301,7 +301,11 @@ router.post('/verify-payment', authMiddleware, async (req, res) => {
         // Create separate order for each item
         const createdOrders = [];
         for (const it of items) {
-          const product = await Product.findByPk(it.productId, { transaction: t });
+          // Lock the product to prevent concurrent stock updates
+          const product = await Product.findByPk(it.productId, { 
+            transaction: t,
+            lock: t.LOCK.UPDATE 
+          });
           if (!product) continue;
 
           // Double-check: verify this specific order doesn't already exist
@@ -386,8 +390,21 @@ router.post('/verify-payment', authMiddleware, async (req, res) => {
           }, { transaction: t });
           
           // Reduce stock
-          product.stock = Math.max(0, product.stock - qty);
-          await product.save({ transaction: t });
+          // For wholesaler products: qty is in multiples, stock is in multiples
+          // For retailer products: qty is in units, stock is in units
+          const currentStock = parseInt(product.stock) || 0;
+          const newStock = Math.max(0, currentStock - qty);
+          await product.update({ stock: newStock }, { transaction: t });
+          
+          console.log('Stock reduced:', {
+            productId: product.id,
+            productTitle: product.title,
+            ownerType: product.ownerType,
+            currentStock,
+            qty,
+            newStock,
+            multiples: product.multiples
+          });
 
           createdOrders.push(order.id);
           console.log('Order created successfully:', { 

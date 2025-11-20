@@ -2,6 +2,7 @@
 import express from 'express';
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
+import { User } from '../models/index.js';
 
 dotenv.config();
 
@@ -52,6 +53,12 @@ router.post('/send', async (req, res) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    // Check if email already exists (before sending OTP)
+    const existing = await User.findOne({ where: { email } });
+    if (existing) {
+      return res.status(400).json({ error: 'Email already exists. Please use a different email or try logging in.' });
     }
 
     // Check if SMTP is configured
