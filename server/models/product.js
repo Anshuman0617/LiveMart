@@ -17,7 +17,8 @@ export default (sequelize) => {
     lat: { type: DataTypes.DECIMAL(10,7), allowNull: true },
     lng: { type: DataTypes.DECIMAL(10,7), allowNull: true },
     ratingAvg: { type: DataTypes.FLOAT, defaultValue: 0.0 },
-    reviewsCount: { type: DataTypes.INTEGER, defaultValue: 0 }
+    reviewsCount: { type: DataTypes.INTEGER, defaultValue: 0 },
+    multiples: { type: DataTypes.INTEGER, defaultValue: 1, allowNull: false } // Minimum order quantity multiple (for wholesalers)
   }, {
     tableName: 'products',
     timestamps: true

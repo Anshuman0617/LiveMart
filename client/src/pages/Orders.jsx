@@ -6,6 +6,9 @@ import { useNavigate } from 'react-router-dom';
 export default function Orders() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [userRole, setUserRole] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -15,13 +18,16 @@ export default function Orders() {
       return;
     }
 
+    setUserRole(user?.role);
+
     const fetchOrders = async () => {
       try {
+        setError(null);
         const res = await api.get('/orders/seller', { headers: authHeader() });
         setOrders(res.data || []);
       } catch (err) {
         console.error('Failed to fetch orders:', err);
-        alert(err.response?.data?.error || 'Failed to load orders');
+        setError(err.response?.data?.error || 'Failed to load orders');
       } finally {
         setLoading(false);
       }
@@ -72,10 +78,30 @@ export default function Orders() {
     order.status === 'delivered' || order.status === 'fulfilled'
   );
 
+  // Filter orders by order number, transaction ID, or customer name
+  const filterOrders = (orderList) => {
+    if (!searchQuery.trim()) return orderList;
+    
+    const query = searchQuery.toLowerCase().trim();
+    return orderList.filter(order => {
+      const orderId = order.id?.toString() || '';
+      const transactionId = order.paymentId?.toLowerCase() || '';
+      const customerName = order.customer?.name?.toLowerCase() || '';
+      const customerEmail = order.customer?.email?.toLowerCase() || '';
+      return orderId.includes(query) || 
+             transactionId.includes(query) || 
+             customerName.includes(query) ||
+             customerEmail.includes(query);
+    });
+  };
+
+  const filteredCurrentOrders = filterOrders(currentOrders);
+  const filteredPreviousOrders = filterOrders(previousOrders);
+
   if (loading) {
     return (
       <div className="App">
-        <h2>Orders</h2>
+        <h1>Orders Management</h1>
         <p>Loading orders...</p>
       </div>
     );
@@ -83,22 +109,62 @@ export default function Orders() {
 
   return (
     <div className="App">
-      <h2>Orders Management</h2>
+      <h1>Orders Management</h1>
+
+      {/* Search Bar */}
+      <div style={{ marginTop: '20px', marginBottom: '20px' }}>
+        <input
+          type="text"
+          placeholder={
+            userRole === 'retailer' 
+              ? "Search by Order #, Transaction ID, or User Name..." 
+              : userRole === 'wholesaler'
+              ? "Search by Order #, Transaction ID, or Retailer Name..."
+              : "Search by Order # or Transaction ID..."
+          }
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={{
+            width: '100%',
+            maxWidth: '400px',
+            padding: '10px',
+            fontSize: '16px',
+            border: '1px solid #ddd',
+            borderRadius: '6px'
+          }}
+        />
+      </div>
+
+      {error && (
+        <div style={{ 
+          padding: '16px', 
+          backgroundColor: '#fee2e2', 
+          color: '#dc2626', 
+          borderRadius: '8px', 
+          marginTop: '20px',
+          marginBottom: '20px'
+        }}>
+          {error}
+        </div>
+      )}
 
       {/* Current Orders (Undelivered) */}
-      {currentOrders.length > 0 && (
+      {filteredCurrentOrders.length > 0 && (
         <div style={{ marginTop: '30px' }}>
-          <h3 style={{ marginBottom: '20px' }}>Current Orders (Undelivered)</h3>
+          <h2 style={{ marginBottom: '20px', fontSize: '24px', fontWeight: 600 }}>
+            Current Orders (Undelivered)
+            {searchQuery && ` (${filteredCurrentOrders.length} found)`}
+          </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {currentOrders.map((order) => (
+            {filteredCurrentOrders.map((order) => (
               <div
                 key={order.id}
                 style={{
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '8px',
-                  padding: '20px',
+                  border: '1px solid #e0e0e0',
+                  borderRadius: '12px',
+                  padding: '24px',
                   backgroundColor: '#fff',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '16px' }}>
@@ -106,6 +172,11 @@ export default function Orders() {
                     <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>
                       Order #{order.id}
                     </h3>
+                    {order.paymentId && (
+                      <p style={{ margin: '4px 0', fontSize: '13px', color: '#6b7280', fontFamily: 'monospace' }}>
+                        Transaction ID: {order.paymentId}
+                      </p>
+                    )}
                     <p style={{ margin: '4px 0', fontSize: '14px', color: '#6b7280' }}>
                       Ordered on: {formatDate(order.createdAt)}
                     </p>
@@ -129,9 +200,10 @@ export default function Orders() {
                 {order.customer && (
                   <div style={{ 
                     marginBottom: '16px',
-                    padding: '12px',
+                    padding: '16px',
                     backgroundColor: '#f3f4f6',
-                    borderRadius: '6px'
+                    borderRadius: '8px',
+                    border: '1px solid #e5e7eb'
                   }}>
                     <p style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 600 }}>
                       Customer Information:
@@ -156,33 +228,34 @@ export default function Orders() {
                 )}
 
                 {/* Order Items */}
-                <div style={{ marginBottom: '16px' }}>
-                  <p style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 600 }}>Items:</p>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ marginBottom: '12px' }}>
+                  <p style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 600 }}>Items:</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {order.items?.map((item) => (
                       <div 
                         key={item.id} 
                         style={{ 
                           display: 'flex', 
-                          gap: '12px', 
+                          gap: '8px', 
                           alignItems: 'center',
                           padding: '8px',
                           backgroundColor: '#f9fafb',
-                          borderRadius: '6px'
+                          borderRadius: '6px',
+                          border: '1px solid #e5e7eb'
                         }}
                       >
                         {item.product?.imageUrl || (item.product?.images && item.product.images[0]) ? (
                           <img
                             src={`http://localhost:4000${item.product.imageUrl || item.product.images[0]}`}
                             alt={item.product?.title}
-                            style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '4px' }}
+                            style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '6px' }}
                           />
                         ) : null}
                         <div style={{ flex: 1 }}>
-                          <p style={{ margin: 0, fontSize: '14px', fontWeight: 500 }}>
+                          <p style={{ margin: 0, fontSize: '13px', fontWeight: 500 }}>
                             {item.product?.title || 'Product'}
                           </p>
-                          <p style={{ margin: '4px 0', fontSize: '12px', color: '#6b7280' }}>
+                          <p style={{ margin: '2px 0', fontSize: '11px', color: '#6b7280' }}>
                             Qty: {item.quantity} × ₹{(() => {
                               const unitPrice = parseFloat(item.unitPrice) || 0;
                               return unitPrice.toFixed(2);
@@ -247,19 +320,22 @@ export default function Orders() {
       )}
 
       {/* Previous Orders (Delivered) */}
-      {previousOrders.length > 0 && (
+      {filteredPreviousOrders.length > 0 && (
         <div style={{ marginTop: '40px' }}>
-          <h3 style={{ marginBottom: '20px' }}>Previous Orders (Delivered)</h3>
+          <h2 style={{ marginBottom: '20px', fontSize: '24px', fontWeight: 600 }}>
+            Previous Orders (Delivered)
+            {searchQuery && ` (${filteredPreviousOrders.length} found)`}
+          </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {previousOrders.map((order) => (
+            {filteredPreviousOrders.map((order) => (
               <div
                 key={order.id}
                 style={{
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '8px',
-                  padding: '20px',
+                  border: '1px solid #e0e0e0',
+                  borderRadius: '12px',
+                  padding: '24px',
                   backgroundColor: '#f9fafb',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '16px' }}>
@@ -267,6 +343,11 @@ export default function Orders() {
                     <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>
                       Order #{order.id}
                     </h3>
+                    {order.paymentId && (
+                      <p style={{ margin: '4px 0', fontSize: '13px', color: '#6b7280', fontFamily: 'monospace' }}>
+                        Transaction ID: {order.paymentId}
+                      </p>
+                    )}
                     <p style={{ margin: '4px 0', fontSize: '14px', color: '#6b7280' }}>
                       Ordered on: {formatDate(order.createdAt)}
                     </p>
@@ -285,9 +366,10 @@ export default function Orders() {
                 {order.customer && (
                   <div style={{ 
                     marginBottom: '16px',
-                    padding: '12px',
+                    padding: '16px',
                     backgroundColor: '#f3f4f6',
-                    borderRadius: '6px'
+                    borderRadius: '8px',
+                    border: '1px solid #e5e7eb'
                   }}>
                     <p style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 600 }}>
                       Customer Information:
@@ -312,33 +394,34 @@ export default function Orders() {
                 )}
 
                 {/* Order Items */}
-                <div style={{ marginBottom: '16px' }}>
-                  <p style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 600 }}>Items:</p>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ marginBottom: '12px' }}>
+                  <p style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 600 }}>Items:</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {order.items?.map((item) => (
                       <div 
                         key={item.id} 
                         style={{ 
                           display: 'flex', 
-                          gap: '12px', 
+                          gap: '8px', 
                           alignItems: 'center',
                           padding: '8px',
                           backgroundColor: '#fff',
-                          borderRadius: '6px'
+                          borderRadius: '6px',
+                          border: '1px solid #e5e7eb'
                         }}
                       >
                         {item.product?.imageUrl || (item.product?.images && item.product.images[0]) ? (
                           <img
                             src={`http://localhost:4000${item.product.imageUrl || item.product.images[0]}`}
                             alt={item.product?.title}
-                            style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '4px' }}
+                            style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '6px' }}
                           />
                         ) : null}
                         <div style={{ flex: 1 }}>
-                          <p style={{ margin: 0, fontSize: '14px', fontWeight: 500 }}>
+                          <p style={{ margin: 0, fontSize: '13px', fontWeight: 500 }}>
                             {item.product?.title || 'Product'}
                           </p>
-                          <p style={{ margin: '4px 0', fontSize: '12px', color: '#6b7280' }}>
+                          <p style={{ margin: '2px 0', fontSize: '11px', color: '#6b7280' }}>
                             Qty: {item.quantity} × ₹{(() => {
                               const unitPrice = parseFloat(item.unitPrice) || 0;
                               return unitPrice.toFixed(2);
@@ -380,9 +463,21 @@ export default function Orders() {
         </div>
       )}
 
-      {currentOrders.length === 0 && previousOrders.length === 0 && (
+      {!error && filteredCurrentOrders.length === 0 && filteredPreviousOrders.length === 0 && (
         <div style={{ marginTop: '40px', textAlign: 'center', padding: '40px' }}>
-          <p style={{ fontSize: '16px', color: '#6b7280' }}>No orders yet</p>
+          <p style={{ fontSize: '18px', color: '#6b7280', fontWeight: 500 }}>
+            {searchQuery ? 'No orders found matching your search' : 'No orders yet'}
+          </p>
+          {searchQuery && (
+            <p style={{ fontSize: '14px', color: '#9ca3af', marginTop: '8px' }}>
+              Try searching by order number, transaction ID, or {userRole === 'retailer' ? 'user name' : userRole === 'wholesaler' ? 'retailer name' : 'customer name'}
+            </p>
+          )}
+          {!searchQuery && (
+            <p style={{ fontSize: '14px', color: '#9ca3af', marginTop: '8px' }}>
+              Orders from customers will appear here once they purchase your products.
+            </p>
+          )}
         </div>
       )}
     </div>

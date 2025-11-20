@@ -11,15 +11,28 @@ export default function ProductDetail() {
   const [showModal, setShowModal] = useState(false);
   const [mainImageIndex, setMainImageIndex] = useState(0);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
+    setError(null);
     api.get(`/products/${id}`)
       .then((res) => {
         setP(res.data);
         // Reset main image index when product changes
         setMainImageIndex(0);
       })
-      .catch((err) => console.error(err));
+      .catch((err) => {
+        if (err.response?.status === 403) {
+          setError("Access denied. This product is only available to retailers.");
+          // Don't log 403 errors to console - they're expected for access control
+        } else if (err.response?.status === 404) {
+          setError("Product not found.");
+          console.error("ProductDetail 404:", err);
+        } else {
+          setError("Failed to load product. Please try again.");
+          console.error("ProductDetail error:", err);
+        }
+      });
   }, [id]);
 
   useEffect(() => {
@@ -29,6 +42,30 @@ export default function ProductDetail() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  if (error) {
+    return (
+      <div className="App" style={{ padding: 40, textAlign: "center" }}>
+        <h2 style={{ color: "#dc2626" }}>Error</h2>
+        <p>{error}</p>
+        <button
+          onClick={() => window.history.back()}
+          style={{
+            marginTop: 20,
+            padding: "12px 24px",
+            fontSize: "16px",
+            background: "#3399cc",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            cursor: "pointer",
+          }}
+        >
+          Go Back
+        </button>
+      </div>
+    );
+  }
 
   if (!p) return <div className="App">Loading...</div>;
 
@@ -171,10 +208,55 @@ export default function ProductDetail() {
           <h2 style={{ margin: "0 0 16px 0", fontSize: "28px", fontWeight: "bold" }}>
             {p.title}
           </h2>
-          <p style={{ margin: "0 0 12px 0", fontSize: "24px", fontWeight: "bold" }}>
-            <strong>Price:</strong> ₹{(p.price*(1-p.discount/100)).toFixed(2)}
-          </p>
-          {p.discount && (
+          
+          {/* Star Rating */}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
+            <div style={{ display: "flex", gap: "2px" }}>
+              {(() => {
+                const rating = p.ratingAvg || 0;
+                const reviewsCount = p.reviewsCount || 0;
+                const fullStars = Math.floor(rating);
+                const hasHalfStar = rating % 1 >= 0.5;
+                
+                return [1, 2, 3, 4, 5].map((star) => {
+                  if (rating === 0) {
+                    return <span key={star} style={{ fontSize: "20px", color: "#d1d5db" }}>☆</span>;
+                  }
+                  if (star <= fullStars) {
+                    return <span key={star} style={{ fontSize: "20px", color: "#fbbf24" }}>★</span>;
+                  }
+                  if (hasHalfStar && star === fullStars + 1) {
+                    return <span key={star} style={{ fontSize: "20px", color: "#fbbf24", opacity: 0.6 }}>★</span>;
+                  }
+                  return <span key={star} style={{ fontSize: "20px", color: "#d1d5db" }}>☆</span>;
+                });
+              })()}
+            </div>
+            {p.ratingAvg > 0 ? (
+              <span style={{ fontSize: "16px", color: "#666" }}>
+                {p.ratingAvg.toFixed(1)} ({p.reviewsCount || 0} {(p.reviewsCount || 0) === 1 ? 'review' : 'reviews'})
+              </span>
+            ) : (
+              <span style={{ fontSize: "16px", color: "#999" }}>No ratings yet</span>
+            )}
+          </div>
+          
+          {/* Price Display */}
+          {p.ownerType === 'wholesaler' && p.multiples && p.multiples > 1 ? (
+            <div style={{ margin: "0 0 12px 0" }}>
+              <p style={{ margin: "0 0 4px 0", fontSize: "24px", fontWeight: "bold" }}>
+                <strong>Price per Multiple:</strong> ₹{(parseFloat(p.price || 0) * (p.multiples || 1)).toFixed(2)}
+              </p>
+              <p style={{ margin: "0", fontSize: "16px", color: "#666" }}>
+                <strong>Price per Unit:</strong> ₹{parseFloat(p.price || 0).toFixed(2)} (×{p.multiples} units per multiple)
+              </p>
+            </div>
+          ) : (
+            <p style={{ margin: "0 0 12px 0", fontSize: "24px", fontWeight: "bold" }}>
+              <strong>Price:</strong> ₹{(parseFloat(p.price || 0) * (1 - (parseFloat(p.discount || 0) / 100))).toFixed(2)}
+            </p>
+          )}
+          {p.discount && p.discount > 0 && (
             <p style={{ margin: "0 0 12px 0" }}>
               <strong>Discount:</strong> {p.discount}%
             </p>
@@ -184,22 +266,38 @@ export default function ProductDetail() {
           </p>
 
           {/* Stock indicator */}
-          {p.stock !== undefined && p.stock !== null && (
-            <p style={{ margin: "8px 0" }}>
-              <strong>Stock:</strong> {p.stock} units
-              {p.stock <= 0 && (
-                <span style={{
-                  marginLeft: "8px",
-                  fontSize: "12px",
-                  color: "#dc2626",
-                  fontWeight: "600",
-                  backgroundColor: "#fee2e2",
-                  padding: "2px 8px",
-                  borderRadius: "4px"
-                }}>
-                  OUT OF STOCK
-                </span>
-              )}
+          {p.stock !== undefined && p.stock !== null && (() => {
+            const multiples = p.multiples || 1;
+            const totalUnits = p.stock * multiples;
+            return (
+              <p style={{ margin: "8px 0" }}>
+                <strong>Stock:</strong> {totalUnits} units
+                {p.ownerType === 'wholesaler' && multiples > 1 && (
+                  <span style={{ marginLeft: "4px", fontSize: "12px", color: "#999" }}>
+                    ({p.stock} multiple{p.stock !== 1 ? 's' : ''})
+                  </span>
+                )}
+                {p.stock <= 0 && (
+                  <span style={{
+                    marginLeft: "8px",
+                    fontSize: "12px",
+                    color: "#dc2626",
+                    fontWeight: "600",
+                    backgroundColor: "#fee2e2",
+                    padding: "2px 8px",
+                    borderRadius: "4px"
+                  }}>
+                    OUT OF STOCK
+                  </span>
+                )}
+              </p>
+            );
+          })()}
+          
+          {/* Multiples indicator for wholesaler products */}
+          {p.ownerType === 'wholesaler' && p.multiples && p.multiples > 1 && (
+            <p style={{ margin: "8px 0", fontSize: "14px", color: "#f59e0b", fontWeight: "600" }}>
+              ⚠️ This product must be ordered in multiples of {p.multiples} (e.g., {p.multiples}, {p.multiples * 2}, {p.multiples * 3}, ...)
             </p>
           )}
           

@@ -70,18 +70,27 @@ describe('getDrivingDistances', () => {
   });
 
   it('handles API errors gracefully', async () => {
-    global.fetch.mockResolvedValueOnce({
-      ok: false,
-      text: async () => 'API Error',
-    });
+    // Suppress console.error for this test since we're testing error handling
+    const originalError = console.error;
+    console.error = vi.fn();
+    
+    try {
+      global.fetch.mockResolvedValueOnce({
+        ok: false,
+        text: async () => 'API Error',
+      });
 
-    const products = [
-      { id: 1, lat: 40.7128, lng: -74.0060 },
-    ];
+      const products = [
+        { id: 1, lat: 40.7128, lng: -74.0060 },
+      ];
 
-    const result = await getDrivingDistances(40.7128, -74.0060, products);
+      const result = await getDrivingDistances(40.7128, -74.0060, products);
 
-    expect(result[0].distanceMeters).toBeNull();
+      expect(result[0].distanceMeters).toBeNull();
+    } finally {
+      // Restore console.error
+      console.error = originalError;
+    }
   });
 
   it('handles invalid response structure', async () => {

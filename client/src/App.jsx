@@ -41,6 +41,29 @@ export default function App() {
 
         <Route path="/orders" element={<Orders />} />
 
+        {/* Catch-all route for 404 */}
+        <Route path="*" element={
+          <div style={{ padding: 40, textAlign: "center" }}>
+            <h2>Page Not Found</h2>
+            <p>The page you're looking for doesn't exist.</p>
+            <button
+              onClick={() => window.location.href = "/"}
+              style={{
+                marginTop: 20,
+                padding: "12px 24px",
+                fontSize: "16px",
+                background: "#3399cc",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+              }}
+            >
+              Go to Home
+            </button>
+          </div>
+        } />
+
       </Routes>
     </BrowserRouter>
   );

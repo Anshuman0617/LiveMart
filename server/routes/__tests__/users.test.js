@@ -157,15 +157,25 @@ describe('Users Routes', () => {
 
     it('handles server errors', async () => {
       const { User } = await import('../../models/index.js');
-      User.findByPk.mockRejectedValue(new Error('Database error'));
-
-      const response = await request(app)
-        .put('/users/me')
-        .send({ name: 'New Name' });
       
-      expect(response.status).toBe(500);
+      // Suppress console.error for this test since we're testing error handling
+      const originalError = console.error;
+      console.error = vi.fn();
+      
+      try {
+        // Mock findByPk to throw an error when called
+        User.findByPk.mockRejectedValueOnce(new Error('Database error'));
 
-      expect(response.body).toHaveProperty('error', 'Server error');
+        const response = await request(app)
+          .put('/users/me')
+          .send({ name: 'New Name' });
+        
+        expect(response.status).toBe(500);
+        expect(response.body).toHaveProperty('error', 'Server error');
+      } finally {
+        // Restore console.error
+        console.error = originalError;
+      }
     });
   });
 

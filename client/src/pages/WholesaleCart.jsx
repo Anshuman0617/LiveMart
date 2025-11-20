@@ -41,6 +41,12 @@ export default function WholesaleCart() {
               description: product.description || ''
             };
           } catch (err) {
+            // If 403 (Forbidden), the product is no longer accessible (e.g., user changed role)
+            // Remove it from cart silently
+            if (err.response?.status === 403) {
+              console.warn(`Product ${item.productId} is no longer accessible. Removing from cart.`);
+              return null; // Mark for removal
+            }
             console.error(`Failed to load product ${item.productId}:`, err);
             return {
               ...item,
@@ -52,7 +58,25 @@ export default function WholesaleCart() {
           }
         })
       );
-      setCartItems(itemsWithDetails);
+      // Filter out items that were marked for removal (403 errors)
+      const validItems = itemsWithDetails.filter(item => item !== null);
+      setCartItems(validItems);
+      
+      // If any items were removed, update the cart in localStorage
+      if (validItems.length < itemsWithDetails.length) {
+        const user = JSON.parse(localStorage.getItem('user') || 'null');
+        const userId = user?.id;
+        const cartKey = userId ? `wholesaleCart_${userId}` : 'wholesaleCart';
+        const updatedCart = validItems.map(item => ({
+          productId: item.productId,
+          title: item.title,
+          price: item.price,
+          quantity: item.quantity,
+          multiples: item.multiples
+        }));
+        localStorage.setItem(cartKey, JSON.stringify(updatedCart));
+        setCart(updatedCart);
+      }
     } catch (err) {
       console.error("Failed to load cart products:", err);
       setCartItems(c.map(item => ({ ...item, product: null, discount: 0, imageUrl: null, description: '' })));
@@ -152,6 +176,12 @@ export default function WholesaleCart() {
                 description: product.description || ''
               };
             } catch (err) {
+              // If 403 (Forbidden), the product is no longer accessible (e.g., user changed role)
+              // Remove it from cart silently
+              if (err.response?.status === 403) {
+                console.warn(`Product ${item.productId} is no longer accessible. Removing from cart.`);
+                return null; // Mark for removal
+              }
               console.error(`Failed to load product ${item.productId}:`, err);
               return {
                 ...item,
@@ -163,7 +193,25 @@ export default function WholesaleCart() {
             }
           })
         );
-        setCartItems(itemsWithDetails);
+        // Filter out items that were marked for removal (403 errors)
+        const validItems = itemsWithDetails.filter(item => item !== null);
+        setCartItems(validItems);
+        
+        // If any items were removed, update the cart in localStorage
+        if (validItems.length < itemsWithDetails.length) {
+          const user = JSON.parse(localStorage.getItem('user') || 'null');
+          const userId = user?.id;
+          const cartKey = userId ? `wholesaleCart_${userId}` : 'wholesaleCart';
+          const updatedCart = validItems.map(item => ({
+            productId: item.productId,
+            title: item.title,
+            price: item.price,
+            quantity: item.quantity,
+            multiples: item.multiples
+          }));
+          localStorage.setItem(cartKey, JSON.stringify(updatedCart));
+          setCart(updatedCart);
+        }
       } catch (err) {
         console.error("Failed to load cart products:", err);
         setCartItems(c.map(item => ({ ...item, product: null, discount: 0, imageUrl: null, description: '' })));
@@ -189,14 +237,20 @@ export default function WholesaleCart() {
     const item = c.find((i) => i.productId === id);
     if (item) {
       const cartItem = cartItems.find(ci => ci.productId === id);
-      const maxQuantity = Math.min(10, cartItem?.product?.stock || 10);
+      const product = cartItem?.product;
+      const maxMultiples = product?.stock || 0; // Stock is in multiples
+      const multiples = item.multiples || product?.multiples || 1; // Use stored multiples or product multiples
+      const maxUnits = maxMultiples * multiples; // Total units available
       
-      if (item.quantity >= maxQuantity) {
-        alert(`Maximum ${maxQuantity} items allowed for this product.`);
+      // Increment by one multiple worth of units
+      const newQuantity = item.quantity + multiples;
+      
+      if (newQuantity > maxUnits) {
+        alert(`Only ${maxMultiples} multiple${maxMultiples !== 1 ? 's' : ''} (${maxUnits} units) available in stock.`);
         return;
       }
       
-      item.quantity++;
+      item.quantity = newQuantity;
       updateCart(c, true); // Skip reload to prevent flashing
     }
   };
@@ -204,8 +258,26 @@ export default function WholesaleCart() {
   const decrement = (id) => {
     const c = [...cart];
     const item = c.find((i) => i.productId === id);
-    if (item && item.quantity > 1) {
-      item.quantity--;
+    if (item) {
+      const cartItem = cartItems.find(ci => ci.productId === id);
+      const product = cartItem?.product;
+      const multiples = item.multiples || product?.multiples || 1; // Use stored multiples or product multiples
+      
+      // Decrement by one multiple worth of units
+      const newQuantity = item.quantity - multiples;
+      
+      if (newQuantity < multiples) {
+        // Can't go below one multiple
+        if (newQuantity < 0) {
+          // Remove item if trying to go below 0
+          updateCart(c.filter((i) => i.productId !== id));
+          return;
+        }
+        alert(`Cannot decrement below ${multiples} units (1 multiple). This product must be ordered in multiples of ${multiples}.`);
+        return;
+      }
+      
+      item.quantity = newQuantity;
       updateCart(c, true); // Skip reload to prevent flashing
     }
   };
@@ -216,17 +288,19 @@ export default function WholesaleCart() {
 
   // Calculate total with discount
   const total = cartItems.reduce((sum, item) => {
-    const originalPrice = parseFloat(item.price || 0);
+    const pricePerUnit = parseFloat(item.price || 0);
     const discount = parseFloat(item.discount || 0);
-    const discountedPrice = originalPrice * (1 - discount / 100);
-    return sum + discountedPrice * item.quantity;
+    // item.quantity is in units, so calculate: (price per unit * quantity)
+    const itemTotal = (pricePerUnit * (1 - discount / 100)) * item.quantity;
+    return sum + itemTotal;
   }, 0);
 
   // Calculate total savings from discounts
   const totalSavings = cartItems.reduce((sum, item) => {
-    const originalPrice = parseFloat(item.price || 0);
+    const pricePerUnit = parseFloat(item.price || 0);
     const discount = parseFloat(item.discount || 0);
-    const savings = (originalPrice * discount / 100) * item.quantity;
+    // item.quantity is in units
+    const savings = (pricePerUnit * discount / 100) * item.quantity;
     return sum + savings;
   }, 0);
 
@@ -264,10 +338,15 @@ export default function WholesaleCart() {
 
     try {
       // Prepare items for order
-      const items = cart.map((item) => ({
-        productId: item.productId,
-        quantity: item.quantity,
-      }));
+      // Convert quantity from units to multiples for backend
+      const items = cart.map((item) => {
+        const multiples = item.multiples || cartItems.find(ci => ci.productId === item.productId)?.product?.multiples || 1;
+        const quantityInMultiples = item.quantity / multiples; // Convert units to multiples
+        return {
+          productId: item.productId,
+          quantity: quantityInMultiples, // Send as multiples to backend
+        };
+      });
 
       // Create PayU payment request
       const paymentRes = await api.post(
@@ -354,24 +433,31 @@ export default function WholesaleCart() {
           marginBottom: "30px"
         }}>
           {cartItems.map((item) => {
-            const originalPrice = parseFloat(item.price || 0);
+            // For wholesaler products, price is per unit, quantity is in units
+            const multiples = item.multiples || item.product?.multiples || 1;
+            const pricePerUnit = parseFloat(item.price || 0);
+            const pricePerMultiple = pricePerUnit * multiples;
+            const originalPrice = pricePerMultiple; // Price per multiple for display
             const discount = parseFloat(item.discount || 0);
             const discountedPrice = originalPrice * (1 - discount / 100);
-            const itemTotal = discountedPrice * item.quantity;
-            const itemSavings = (originalPrice * discount / 100) * item.quantity;
+            // item.quantity is in units, so calculate: (price per unit * quantity)
+            // But we display price per multiple, so: (price per multiple / multiples) * quantity
+            const itemTotal = (pricePerUnit * (1 - discount / 100)) * item.quantity;
+            const itemSavings = (pricePerUnit * discount / 100) * item.quantity;
+            const numMultiples = item.quantity / multiples; // Number of multiples ordered
 
             return (
               <div
                 key={item.productId}
                 style={{
                   border: "1px solid #e0e0e0",
-                  borderRadius: "12px",
-                  padding: "16px",
+                  borderRadius: "10px",
+                  padding: "12px",
                   backgroundColor: "#fff",
                   boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
                   display: "flex",
                   flexDirection: "column",
-                  gap: "12px"
+                  gap: "8px"
                 }}
               >
                 {/* Product Image */}
@@ -382,9 +468,9 @@ export default function WholesaleCart() {
                       alt={item.title}
                       style={{
                         width: "100%",
-                        height: "200px",
+                        height: "160px",
                         objectFit: "cover",
-                        borderRadius: "8px",
+                        borderRadius: "6px",
                         cursor: "pointer"
                       }}
                     />
@@ -397,7 +483,7 @@ export default function WholesaleCart() {
                   style={{ 
                     textDecoration: "none", 
                     color: "inherit",
-                    fontSize: "18px",
+                    fontSize: "16px",
                     fontWeight: "600"
                   }}
                 >
@@ -456,14 +542,30 @@ export default function WholesaleCart() {
                       )}
                     </div>
                   ) : (
-                    <span style={{ fontSize: "20px", fontWeight: "bold" }}>
-                      ₹{originalPrice.toFixed(2)}
-                    </span>
+                    <div>
+                      <span style={{ fontSize: "20px", fontWeight: "bold" }}>
+                        ₹{originalPrice.toFixed(2)}
+                      </span>
+                      {multiples > 1 && (
+                        <p style={{ margin: "2px 0 0 0", fontSize: "12px", color: "#6b7280" }}>
+                          ₹{pricePerUnit.toFixed(2)} per unit (×{multiples})
+                        </p>
+                      )}
+                    </div>
                   )}
                   
                   <div style={{ marginTop: "8px", fontSize: "16px", fontWeight: "600" }}>
-                    Subtotal: ₹{itemTotal.toFixed(2)} ({item.quantity} {item.quantity === 1 ? 'item' : 'items'})
+                    Subtotal: ₹{itemTotal.toFixed(2)} ({item.quantity} {item.quantity === 1 ? 'unit' : 'units'}{multiples > 1 && numMultiples > 0 ? ` = ${numMultiples} multiple${numMultiples !== 1 ? 's' : ''}` : ''})
                   </div>
+                  {multiples > 1 && (
+                    <p style={{ 
+                      margin: "4px 0 0 0", 
+                      fontSize: "12px", 
+                      color: "#6b7280"
+                    }}>
+                      {numMultiples} multiple{numMultiples !== 1 ? 's' : ''} × {multiples} units each
+                    </p>
+                  )}
                 </div>
 
                 {/* Quantity Controls */}
@@ -495,14 +597,22 @@ export default function WholesaleCart() {
                   >
                     -
                   </button>
-                  <span style={{ 
+                  <div style={{ 
                     fontSize: "16px", 
                     fontWeight: "600",
                     minWidth: "30px",
-                    textAlign: "center"
+                    textAlign: "center",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center"
                   }}>
                     {item.quantity}
-                  </span>
+                    {multiples > 1 && numMultiples > 0 && (
+                      <span style={{ fontSize: "12px", color: "#6b7280" }}>
+                        ({numMultiples}×{multiples})
+                      </span>
+                    )}
+                  </div>
                   <button
                     onClick={() => increment(item.productId)}
                     style={{
@@ -728,23 +838,23 @@ export default function WholesaleCart() {
                       </div>
                     </div>
 
-                    <div style={{ marginTop: '12px' }}>
-                      <p style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 600 }}>Items:</p>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ marginTop: '10px' }}>
+                      <p style={{ margin: '0 0 6px 0', fontSize: '13px', fontWeight: 600 }}>Items:</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         {order.items?.map((item) => (
-                          <div key={item.id} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                          <div key={item.id} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                             {item.product?.imageUrl || (item.product?.images && item.product.images[0]) ? (
                               <img
                                 src={`http://localhost:4000${item.product.imageUrl || item.product.images[0]}`}
                                 alt={item.product?.title}
-                                style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px' }}
+                                style={{ width: '45px', height: '45px', objectFit: 'cover', borderRadius: '4px' }}
                               />
                             ) : null}
                             <div style={{ flex: 1 }}>
-                              <p style={{ margin: 0, fontSize: '14px', fontWeight: 500 }}>
+                              <p style={{ margin: 0, fontSize: '13px', fontWeight: 500 }}>
                                 {item.product?.title || 'Product'}
                               </p>
-                              <p style={{ margin: '4px 0', fontSize: '12px', color: '#6b7280' }}>
+                              <p style={{ margin: '2px 0', fontSize: '11px', color: '#6b7280' }}>
                                 Qty: {item.quantity} × ₹{(() => {
                                   const unitPrice = parseFloat(item.unitPrice) || 0;
                                   return unitPrice.toFixed(2);
@@ -809,23 +919,23 @@ export default function WholesaleCart() {
                       </div>
                     </div>
 
-                    <div style={{ marginTop: '12px' }}>
-                      <p style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 600 }}>Items:</p>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ marginTop: '10px' }}>
+                      <p style={{ margin: '0 0 6px 0', fontSize: '13px', fontWeight: 600 }}>Items:</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         {order.items?.map((item) => (
-                          <div key={item.id} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                          <div key={item.id} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                             {item.product?.imageUrl || (item.product?.images && item.product.images[0]) ? (
                               <img
                                 src={`http://localhost:4000${item.product.imageUrl || item.product.images[0]}`}
                                 alt={item.product?.title}
-                                style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px' }}
+                                style={{ width: '45px', height: '45px', objectFit: 'cover', borderRadius: '4px' }}
                               />
                             ) : null}
                             <div style={{ flex: 1 }}>
-                              <p style={{ margin: 0, fontSize: '14px', fontWeight: 500 }}>
+                              <p style={{ margin: 0, fontSize: '13px', fontWeight: 500 }}>
                                 {item.product?.title || 'Product'}
                               </p>
-                              <p style={{ margin: '4px 0', fontSize: '12px', color: '#6b7280' }}>
+                              <p style={{ margin: '2px 0', fontSize: '11px', color: '#6b7280' }}>
                                 Qty: {item.quantity} × ₹{(() => {
                                   const unitPrice = parseFloat(item.unitPrice) || 0;
                                   return unitPrice.toFixed(2);

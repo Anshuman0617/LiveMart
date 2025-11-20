@@ -14,6 +14,7 @@ import reviewsRoutes from './routes/reviews.js';
 import ordersRoutes from './routes/orders.js';
 import paymentsRoutes from './routes/payments.js';
 import earningsRoutes from './routes/earnings.js';
+import otpRoutes from './routes/otp.js';
 
 // --- ADMIN ---
 import { buildAdminRouter } from './admin.js';
@@ -35,6 +36,7 @@ app.use('/api/reviews', reviewsRoutes);
 app.use('/api/orders', ordersRoutes);
 app.use('/api/payments', paymentsRoutes);
 app.use('/api/earnings', earningsRoutes);
+app.use('/api/otp', otpRoutes);
 
 (async () => {
   try {

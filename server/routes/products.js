@@ -177,23 +177,44 @@ if (q) {
 // ---------- GET SINGLE PRODUCT ----------
 // Optional auth: allows both authenticated and unauthenticated users
 router.get('/:id', authMiddleware, async (req, res) => {
-  const p = await Product.findByPk(req.params.id, {
-    include: [
-      { model: User, as: 'owner',
-        attributes: ['id','name','role','picture','address','lat','lng']
+  try {
+    const productId = parseInt(req.params.id);
+    if (isNaN(productId)) {
+      return res.status(400).json({ error: "Invalid product ID" });
+    }
+
+    const p = await Product.findByPk(productId, {
+      include: [
+        { model: User, as: 'owner',
+          attributes: ['id','name','role','picture','address','lat','lng']
+        }
+      ]
+    });
+    if (!p) return res.status(404).json({ error: "Not found" });
+    
+    // Only retailers can access wholesaler products
+    // Regular users (customers) should not be able to see wholesaler products
+    // BUT: Wholesalers can view their own products
+    const userRole = req.user?.role;
+    const userId = req.user?.id;
+    if (p.ownerType == 'wholesaler' && userRole !== 'retailer') {
+      // Allow wholesalers to view their own products
+      if (userRole == 'wholesaler' && p.ownerId == userId) {
+        // Allow access - wholesaler viewing their own product
+      } else {
+        return res.status(403).json({ error: "Access denied. Wholesale products are only available to retailers." });
       }
-    ]
-  });
-  if (!p) return res.status(404).json({ error: "Not found" });
-  
-  // Only retailers can access wholesaler products
-  // Regular users (customers) should not be able to see wholesaler products
-  const userRole = req.user?.role;
-  if (p.ownerType === 'wholesaler' && userRole !== 'retailer') {
-    return res.status(403).json({ error: "Access denied. Wholesale products are only available to retailers." });
+    }
+    
+    res.json(p);
+  } catch (err) {
+    console.error("GET PRODUCT ERROR:", err);
+    console.error("Error details:", err.message);
+    if (err.name === 'SequelizeDatabaseError') {
+      return res.status(400).json({ error: "Database error: " + err.message });
+    }
+    res.status(500).json({ error: "Server error" });
   }
-  
-  res.json(p);
 });
 
 
@@ -205,7 +226,7 @@ router.post(
   upload.array('images', 6),
   async (req, res) => {
     try {
-      const { title, description, price, stock } = req.body;
+      const { title, description, price, stock, multiples } = req.body;
 
       // Validate: Sellers must have address
       if (!req.user.address || !req.user.lat || !req.user.lng) {
@@ -225,6 +246,7 @@ router.post(
         description,
         price,
         stock,
+        multiples: multiples ? parseInt(multiples) : 1, // Default to 1 if not provided
         images,
         imageUrl,
         ownerId: req.user.id,
@@ -263,6 +285,14 @@ router.put(
       if (p.ownerType === 'wholesaler' && payload.discount)
         return res.status(400).json({ error: "Wholesalers cannot set discount" });
 
+      // Parse multiples if provided (for wholesalers)
+      if (payload.multiples !== undefined) {
+        payload.multiples = parseInt(payload.multiples) || 1;
+        if (payload.multiples < 1) {
+          payload.multiples = 1;
+        }
+      }
+
       if (req.files?.length) {
         const newImgs = req.files.map(f => `/uploads/${f.filename}`);
         const currentImages = p.images || [];
@@ -290,9 +320,22 @@ router.put(
       delete payload.lng;
 
       await p.update(payload);
+      // Reload to get updated data including associations
+      await p.reload({
+        include: [
+          { model: User, as: 'owner',
+            attributes: ['id','name','role','picture','address','lat','lng']
+          }
+        ]
+      });
       res.json(p);
     } catch (err) {
       console.error("UPDATE PRODUCT ERROR:", err);
+      console.error("Error details:", err.message, err.stack);
+      // Return more specific error message
+      if (err.name === 'SequelizeValidationError' || err.name === 'SequelizeDatabaseError') {
+        return res.status(400).json({ error: err.message || "Validation error" });
+      }
       res.status(500).json({ error: "Server error" });
     }
   }

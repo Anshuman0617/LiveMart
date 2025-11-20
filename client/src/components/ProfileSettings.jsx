@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { api, authHeader } from '../api';
 import AddressAutocomplete from './AddressAutocomplete';
 
-export default function ProfileSettings({ user, onClose, onSave }) {
+export default function ProfileSettings({ user, onClose, onSave, forceOpen = false }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [userData, setUserData] = useState(user);
@@ -123,11 +123,23 @@ export default function ProfileSettings({ user, onClose, onSave }) {
       });
 
       // Build address fields
-      const houseFlatValue = [streetNumber, route].filter(Boolean).join(' ');
-      const localityValue = sublocality || locality || '';
+      // Don't auto-fill houseFlat (first field) - user must enter manually
+      // Move street number and route to locality field (second field) instead of discarding
+      // Only auto-fill the last 2 fields: locality and cityPin
+      const streetInfo = [streetNumber, route].filter(Boolean).join(' ').trim();
+      const localityParts = [];
+      if (streetInfo) {
+        localityParts.push(streetInfo);
+      }
+      if (sublocality) {
+        localityParts.push(sublocality);
+      } else if (locality) {
+        localityParts.push(locality);
+      }
+      const localityValue = localityParts.join(', ') || '';
       const cityPinValue = [city || locality, state, postalCode].filter(Boolean).join(', ');
 
-      setHouseFlat(houseFlatValue);
+      // Leave houseFlat unchanged (user enters manually)
       setLocality(localityValue);
       setCityPin(cityPinValue);
     }
@@ -181,6 +193,17 @@ export default function ProfileSettings({ user, onClose, onSave }) {
 
       alert('Settings saved successfully!');
       onSave(newUser);
+      
+      // If this was a forced open (new seller), allow closing now
+      if (forceOpen) {
+        // Check if required fields are now set
+        const hasPhone = newUser.phone && newUser.phone.trim() !== '';
+        const hasAddress = newUser.address && newUser.address.trim() !== '';
+        if (hasPhone && hasAddress) {
+          // Required fields are set, allow normal closing
+          // The forceOpen prop will be false on next render since user data is updated
+        }
+      }
     } catch (err) {
       console.error('Failed to save settings:', err);
       alert(err.response?.data?.error || 'Failed to save settings. Please try again.');
@@ -203,7 +226,18 @@ export default function ProfileSettings({ user, onClose, onSave }) {
         alignItems: 'center',
         zIndex: 2000
       }}
-      onClick={onClose}
+      onClick={(e) => {
+        // Prevent closing by clicking outside if forceOpen is true
+        if (forceOpen) {
+          // Only allow closing if clicking directly on the backdrop (not the modal content)
+          if (e.target === e.currentTarget) {
+            alert('Please set your phone number and address before closing. These are required for retailers and wholesalers.');
+            return;
+          }
+        } else {
+          onClose();
+        }
+      }}
     >
       <div
         style={{
@@ -219,19 +253,33 @@ export default function ProfileSettings({ user, onClose, onSave }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-          <h2 style={{ margin: 0 }}>Profile Settings</h2>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              fontSize: '24px',
-              cursor: 'pointer',
-              color: '#666'
-            }}
-          >
-            ×
-          </button>
+          <h2 style={{ margin: 0 }}>
+            Profile Settings
+            {forceOpen && (
+              <span style={{ 
+                fontSize: '14px', 
+                fontWeight: 'normal', 
+                color: '#dc2626',
+                marginLeft: '12px'
+              }}>
+                (Required: Phone & Address)
+              </span>
+            )}
+          </h2>
+          {!forceOpen && (
+            <button
+              onClick={onClose}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer',
+                color: '#666'
+              }}
+            >
+              ×
+            </button>
+          )}
         </div>
 
         {loading && (
@@ -242,6 +290,18 @@ export default function ProfileSettings({ user, onClose, onSave }) {
 
         {!loading && (
           <>
+            {forceOpen && (
+              <div style={{
+                padding: '12px 16px',
+                backgroundColor: '#fef3c7',
+                border: '1px solid #fbbf24',
+                borderRadius: '8px',
+                marginBottom: '20px',
+                color: '#92400e'
+              }}>
+                <strong>⚠️ Required Information:</strong> As a {userData?.role}, you must set your phone number and address before you can continue. Please complete these fields below.
+              </div>
+            )}
         {/* Address Section */}
         <div style={{ marginBottom: '24px' }}>
           <h3 style={{ marginBottom: '12px', fontSize: '16px', fontWeight: 600 }}>
@@ -506,20 +566,23 @@ export default function ProfileSettings({ user, onClose, onSave }) {
 
         {/* Action Buttons */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
-          <button
-            onClick={onClose}
-            disabled={saving}
-            style={{
-              padding: '10px 20px',
-              border: '1px solid #ddd',
-              borderRadius: '6px',
-              background: 'white',
-              cursor: saving ? 'not-allowed' : 'pointer',
-              fontSize: '14px'
-            }}
-          >
-            Cancel
-          </button>
+          {!forceOpen && (
+            <button
+              onClick={onClose}
+              disabled={saving}
+              style={{
+                color: 'black',
+                padding: '10px 20px',
+                border: '1px solid #ddd',
+                borderRadius: '6px',
+                background: 'white',
+                cursor: saving ? 'not-allowed' : 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              Cancel
+            </button>
+          )}
           <button
             onClick={handleSave}
             disabled={saving}

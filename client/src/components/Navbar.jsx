@@ -112,6 +112,15 @@ export default function Navbar() {
               Buy Wholesale
             </button>
           )}
+
+          {(user?.role == "retailer" || user?.role == "wholesaler") && (
+            <button
+              className="nav-button"
+              onClick={() => nav('/orders')}
+            >
+              Manage Orders
+            </button>
+          )}
         </div>
 
         {/* Auth */}

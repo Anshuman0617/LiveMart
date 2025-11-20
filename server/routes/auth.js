@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import { OAuth2Client } from 'google-auth-library';
 import { User } from '../models/index.js';
+import { isOTPVerified, cleanupOTP } from './otp.js';
 
 dotenv.config();
 const router = express.Router();
@@ -13,15 +14,30 @@ const jwtSecret = process.env.JWT_SECRET || 'dev_secret';
 const googleClientId = process.env.GOOGLE_CLIENT_ID || null;
 const googleClient = googleClientId ? new OAuth2Client(googleClientId) : null;
 
-// Register (email/password + role)
+// Register (email/password + role) - REQUIRES OTP VERIFICATION
 router.post('/register', async (req, res) => {
   try {
     const { email, name, password, role } = req.body;
     if (!email || !name || !password) return res.status(400).json({ error: 'Missing fields' });
+    
+    // Check if email already exists
     const existing = await User.findOne({ where: { email } });
-    if (existing) return res.status(400).json({ error: 'Email exists' });
+    if (existing) return res.status(400).json({ error: 'Email already exists' });
+    
+    // Verify OTP before registration
+    if (!isOTPVerified(email)) {
+      return res.status(400).json({ 
+        error: 'Email not verified. Please verify your email with OTP before registering.' 
+      });
+    }
+    
+    // Create user
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await User.create({ email, name, passwordHash, role: role || 'customer' });
+    
+    // Cleanup OTP after successful registration
+    cleanupOTP(email);
+    
     const token = jwt.sign({ id: user.id }, jwtSecret, { expiresIn: '7d' });
     res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
   } catch (err) {

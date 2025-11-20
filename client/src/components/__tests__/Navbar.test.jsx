@@ -131,11 +131,6 @@ describe('Navbar', () => {
     localStorage.setItem('token', 'test-token');
     localStorage.setItem('cart_1', JSON.stringify([{ productId: 1, quantity: 1 }]));
 
-    // Mock window.location.reload
-    const reloadMock = vi.fn();
-    delete window.location;
-    window.location = { reload: reloadMock };
-
     render(
       <BrowserRouter>
         <Navbar />
@@ -154,7 +149,9 @@ describe('Navbar', () => {
     expect(localStorage.getItem('token')).toBeNull();
     expect(localStorage.getItem('user')).toBeNull();
     expect(localStorage.getItem('cart_1')).toBeNull();
-    expect(reloadMock).toHaveBeenCalled();
+    
+    // Check that navigation to login page was called
+    expect(mockNavigate).toHaveBeenCalledWith('/login', { replace: true });
   });
 
   it('closes profile menu when clicking outside', () => {

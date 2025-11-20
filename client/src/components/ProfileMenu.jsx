@@ -1,5 +1,6 @@
 // client/src/components/ProfileMenu.jsx
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, authHeader } from '../api';
 import ProfileSettings from './ProfileSettings';
 
@@ -7,6 +8,31 @@ export default function ProfileMenu({ user, onUserUpdate }) {
   const [showMenu, setShowMenu] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const menuRef = useRef(null);
+  const navigate = useNavigate();
+
+  // Check if user is a new retailer/wholesaler who needs to set phone and address
+  const isNewSeller = () => {
+    if (!user) return false;
+    const isSeller = user.role === 'retailer' || user.role === 'wholesaler';
+    if (!isSeller) return false;
+    
+    // Check if phone or address is missing
+    const missingPhone = !user.phone || user.phone.trim() === '';
+    const missingAddress = !user.address || user.address.trim() === '';
+    
+    return missingPhone || missingAddress;
+  };
+
+  // Auto-open settings for new retailers/wholesalers
+  useEffect(() => {
+    if (user && isNewSeller() && !showSettings) {
+      // Small delay to ensure component is mounted
+      const timer = setTimeout(() => {
+        setShowSettings(true);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [user, showSettings]);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -34,13 +60,32 @@ export default function ProfileMenu({ user, onUserUpdate }) {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     window.dispatchEvent(new Event('userLogout'));
-    window.location.reload();
+    
+    // Redirect to login page and replace history to prevent going back
+    navigate('/login', { replace: true });
+    
+    // Clear browser history to prevent back navigation
+    // This ensures users can't go back to authenticated pages after logout
+    window.history.pushState(null, '', '/login');
   };
 
   const handleSettingsSaved = (updatedUser) => {
     onUserUpdate(updatedUser);
-    setShowSettings(false);
-    setShowMenu(false);
+    
+    // Check if updated user still needs to set phone/address
+    const isSeller = updatedUser.role === 'retailer' || updatedUser.role === 'wholesaler';
+    const missingPhone = !updatedUser.phone || updatedUser.phone.trim() === '';
+    const missingAddress = !updatedUser.address || updatedUser.address.trim() === '';
+    const stillNeedsInfo = isSeller && (missingPhone || missingAddress);
+    
+    // Only close if user has completed required fields
+    if (!stillNeedsInfo) {
+      setShowSettings(false);
+      setShowMenu(false);
+    } else {
+      // Still missing required fields, keep settings open
+      // User will need to save again with complete information
+    }
   };
 
   return (
@@ -90,6 +135,7 @@ export default function ProfileMenu({ user, onUserUpdate }) {
                 setShowMenu(false);
               }}
               style={{
+                color: 'black',
                 width: '100%',
                 padding: '12px 16px',
                 border: 'none',
@@ -128,8 +174,16 @@ export default function ProfileMenu({ user, onUserUpdate }) {
       {showSettings && (
         <ProfileSettings
           user={user}
-          onClose={() => setShowSettings(false)}
+          onClose={() => {
+            // Prevent closing if user is a new seller without phone/address
+            if (isNewSeller()) {
+              alert('Please set your phone number and address before closing. These are required for retailers and wholesalers.');
+              return;
+            }
+            setShowSettings(false);
+          }}
           onSave={handleSettingsSaved}
+          forceOpen={isNewSeller()}
         />
       )}
     </>

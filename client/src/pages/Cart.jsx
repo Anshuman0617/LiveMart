@@ -365,44 +365,59 @@ export default function Cart() {
                 key={item.productId}
                 style={{
                   border: "1px solid #e0e0e0",
-                  borderRadius: "12px",
-                  padding: "16px",
+                  borderRadius: "10px",
+                  padding: "12px",
                   backgroundColor: "#fff",
                   boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
                   display: "flex",
                   flexDirection: "column",
-                  gap: "12px"
+                  gap: "8px",
+                  position: "relative"
                 }}
               >
+                {/* Clickable wrapper for entire card except quantity controls and remove button */}
+                <Link 
+                  to={`/product/${item.productId}`}
+                  style={{
+                    textDecoration: "none",
+                    color: "inherit",
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: "100px", // Leave space for quantity controls and remove button
+                    zIndex: 1,
+                    cursor: "pointer"
+                  }}
+                  onClick={(e) => {
+                    // Don't navigate if clicking on buttons
+                    const target = e.target;
+                    if (target.closest('button')) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }
+                  }}
+                />
+
                 {/* Product Image */}
                 {item.imageUrl && (
-                  <Link to={`/product/${item.productId}`}>
-                    <img
-                      src={`http://localhost:4000${item.imageUrl}`}
-                      alt={item.title}
-                      style={{
-                        width: "100%",
-                        height: "200px",
-                        objectFit: "cover",
-                        borderRadius: "8px",
-                        cursor: "pointer"
-                      }}
-                    />
-                  </Link>
+                  <img
+                    src={`http://localhost:4000${item.imageUrl}`}
+                    alt={item.title}
+                    style={{
+                      width: "100%",
+                      height: "160px",
+                      objectFit: "cover",
+                      borderRadius: "6px",
+                      pointerEvents: "none"
+                    }}
+                  />
                 )}
 
                 {/* Product Title */}
-                <Link 
-                  to={`/product/${item.productId}`}
-                  style={{ 
-                    textDecoration: "none", 
-                    color: "inherit",
-                    fontSize: "18px",
-                    fontWeight: "600"
-                  }}
-                >
-                  <h3 style={{ margin: 0, color: "#333" }}>{item.title}</h3>
-                </Link>
+                <h3 style={{ margin: 0, color: "#333", fontSize: "16px", fontWeight: "600", pointerEvents: "none" }}>
+                  {item.title}
+                </h3>
 
                 {/* Description */}
                 {item.description && (
@@ -413,14 +428,15 @@ export default function Cart() {
                     display: "-webkit-box",
                     WebkitLineClamp: 2,
                     WebkitBoxOrient: "vertical",
-                    overflow: "hidden"
+                    overflow: "hidden",
+                    pointerEvents: "none"
                   }}>
                     {item.description}
                   </p>
                 )}
 
                 {/* Price Information */}
-                <div style={{ marginTop: "auto" }}>
+                <div style={{ marginTop: "auto", pointerEvents: "none" }}>
                   {discount > 0 ? (
                     <div>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
@@ -471,10 +487,15 @@ export default function Cart() {
                   display: "flex", 
                   gap: "12px", 
                   alignItems: "center",
-                  marginTop: "8px"
+                  marginTop: "8px",
+                  position: "relative",
+                  zIndex: 2
                 }}>
                   <button
-                    onClick={() => decrement(item.productId)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      decrement(item.productId);
+                    }}
                     style={{
                       width: "36px",
                       height: "36px",
@@ -504,7 +525,10 @@ export default function Cart() {
                     {item.quantity}
                   </span>
                   <button
-                    onClick={() => increment(item.productId)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      increment(item.productId);
+                    }}
                     style={{
                       width: "36px",
                       height: "36px",
@@ -529,7 +553,10 @@ export default function Cart() {
 
                 {/* Remove Button */}
                 <button
-                  onClick={() => removeItem(item.productId)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeItem(item.productId);
+                  }}
                   style={{
                     marginTop: "8px",
                     padding: "8px 16px",
@@ -540,7 +567,9 @@ export default function Cart() {
                     cursor: "pointer",
                     fontSize: "14px",
                     fontWeight: "600",
-                    transition: "background 0.2s"
+                    transition: "background 0.2s",
+                    position: "relative",
+                    zIndex: 2
                   }}
                   onMouseEnter={(e) => e.target.style.background = "#b91c1c"}
                   onMouseLeave={(e) => e.target.style.background = "#dc2626"}
@@ -717,23 +746,23 @@ export default function Cart() {
                       </div>
                     </div>
 
-                    <div style={{ marginTop: '12px' }}>
-                      <p style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 600 }}>Items:</p>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ marginTop: '10px' }}>
+                      <p style={{ margin: '0 0 6px 0', fontSize: '13px', fontWeight: 600 }}>Items:</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         {order.items?.map((item) => (
-                          <div key={item.id} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                          <div key={item.id} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                             {item.product?.imageUrl || (item.product?.images && item.product.images[0]) ? (
                               <img
                                 src={`http://localhost:4000${item.product.imageUrl || item.product.images[0]}`}
                                 alt={item.product?.title}
-                                style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px' }}
+                                style={{ width: '45px', height: '45px', objectFit: 'cover', borderRadius: '4px' }}
                               />
                             ) : null}
                             <div style={{ flex: 1 }}>
-                              <p style={{ margin: 0, fontSize: '14px', fontWeight: 500 }}>
+                              <p style={{ margin: 0, fontSize: '13px', fontWeight: 500 }}>
                                 {item.product?.title || 'Product'}
                               </p>
-                              <p style={{ margin: '4px 0', fontSize: '12px', color: '#6b7280' }}>
+                              <p style={{ margin: '2px 0', fontSize: '11px', color: '#6b7280' }}>
                                 Qty: {item.quantity} × ₹{(() => {
                                   const unitPrice = parseFloat(item.unitPrice) || 0;
                                   return unitPrice.toFixed(2);
@@ -798,23 +827,23 @@ export default function Cart() {
                       </div>
                     </div>
 
-                    <div style={{ marginTop: '12px' }}>
-                      <p style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 600 }}>Items:</p>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ marginTop: '10px' }}>
+                      <p style={{ margin: '0 0 6px 0', fontSize: '13px', fontWeight: 600 }}>Items:</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         {order.items?.map((item) => (
-                          <div key={item.id} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                          <div key={item.id} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                             {item.product?.imageUrl || (item.product?.images && item.product.images[0]) ? (
                               <img
                                 src={`http://localhost:4000${item.product.imageUrl || item.product.images[0]}`}
                                 alt={item.product?.title}
-                                style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '4px' }}
+                                style={{ width: '45px', height: '45px', objectFit: 'cover', borderRadius: '4px' }}
                               />
                             ) : null}
                             <div style={{ flex: 1 }}>
-                              <p style={{ margin: 0, fontSize: '14px', fontWeight: 500 }}>
+                              <p style={{ margin: 0, fontSize: '13px', fontWeight: 500 }}>
                                 {item.product?.title || 'Product'}
                               </p>
-                              <p style={{ margin: '4px 0', fontSize: '12px', color: '#6b7280' }}>
+                              <p style={{ margin: '2px 0', fontSize: '11px', color: '#6b7280' }}>
                                 Qty: {item.quantity} × ₹{(() => {
                                   const unitPrice = parseFloat(item.unitPrice) || 0;
                                   return unitPrice.toFixed(2);

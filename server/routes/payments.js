@@ -48,8 +48,11 @@ router.post('/create-payment', authMiddleware, async (req, res) => {
       if (!product) continue;
       const unitPrice = parseFloat(product.price);
       const discount = parseFloat(product.discount || 0);
-      const discountedPrice = unitPrice * (1 - discount / 100);
-      const qty = parseInt(it.quantity, 10);
+      const multiples = product.multiples || 1;
+      // For wholesaler products, quantity is in multiples, so price per multiple = unitPrice * multiples
+      const pricePerMultiple = unitPrice * multiples;
+      const discountedPrice = pricePerMultiple * (1 - discount / 100);
+      const qty = parseInt(it.quantity, 10); // qty is in multiples
       total += discountedPrice * qty;
     }
 
@@ -58,6 +61,39 @@ router.post('/create-payment', authMiddleware, async (req, res) => {
     const txnId = `TXN${Date.now()}`;
     const amount = total.toFixed(2);
     const productInfo = `Order from LiveMart - ${items.length} item(s)`;
+
+    // Get success and failure URLs from environment or use defaults
+    // Default to port 3000 (Vite dev server) or use environment variable
+    const defaultPort = process.env.CLIENT_PORT || '3000';
+    const defaultBaseUrl = process.env.CLIENT_BASE_URL || `http://localhost:${defaultPort}`;
+    let successUrl = process.env.PAYU_SUCCESS_URL || `${defaultBaseUrl}/payment-success`;
+    let failureUrl = process.env.PAYU_FAILURE_URL || `${defaultBaseUrl}/payment-failure`;
+
+    // Ensure URLs are properly formatted (no trailing slashes except after domain)
+    successUrl = successUrl.replace(/([^:]\/)\/+/g, "$1");
+    failureUrl = failureUrl.replace(/([^:]\/)\/+/g, "$1");
+
+    // Validate URLs are absolute
+    if (!successUrl.startsWith('http://') && !successUrl.startsWith('https://')) {
+      console.error('Invalid success URL format:', successUrl);
+      return res.status(500).json({ error: 'Invalid success URL configuration' });
+    }
+    if (!failureUrl.startsWith('http://') && !failureUrl.startsWith('https://')) {
+      console.error('Invalid failure URL format:', failureUrl);
+      return res.status(500).json({ error: 'Invalid failure URL configuration' });
+    }
+
+    // Log URLs for debugging
+    console.log('=== PayU Payment Request ===');
+    console.log('Redirect URLs:', { 
+      successUrl, 
+      failureUrl,
+      mode: process.env.PAYU_MODE || 'test',
+      merchantKey: merchantKey ? '***' + merchantKey.slice(-4) : 'NOT SET'
+    });
+    console.log('Transaction ID:', txnId);
+    console.log('Amount:', amount);
+    console.log('===========================');
 
     // Create payment parameters
     const paymentParams = {
@@ -68,8 +104,8 @@ router.post('/create-payment', authMiddleware, async (req, res) => {
       firstname: firstName,
       email: email,
       phone: phone,
-      surl: process.env.PAYU_SUCCESS_URL || 'http://localhost:5173/payment-success',
-      furl: process.env.PAYU_FAILURE_URL || 'http://localhost:5173/payment-failure',
+      surl: successUrl,
+      furl: failureUrl,
       hash: '', // Will be calculated
     };
 
@@ -304,8 +340,11 @@ router.post('/verify-payment', authMiddleware, async (req, res) => {
 
           const originalPrice = parseFloat(product.price);
           const discount = parseFloat(product.discount || 0);
-          const discountedPrice = originalPrice * (1 - discount / 100);
-          const qty = parseInt(it.quantity, 10);
+          const multiples = product.multiples || 1;
+          // For wholesaler products, quantity is in multiples, so price per multiple = originalPrice * multiples
+          const pricePerMultiple = originalPrice * multiples;
+          const discountedPrice = pricePerMultiple * (1 - discount / 100);
+          const qty = parseInt(it.quantity, 10); // qty is in multiples
           const subtotal = discountedPrice * qty; // Use discounted price for subtotal
 
           // Create one order per item
@@ -321,8 +360,8 @@ router.post('/verify-payment', authMiddleware, async (req, res) => {
           const orderItem = await OrderItem.create({
             orderId: order.id,
             productId: product.id,
-            quantity: qty,
-            unitPrice: discountedPrice, // Store discounted price as unit price
+            quantity: qty, // Store quantity in multiples
+            unitPrice: discountedPrice, // Store discounted price per multiple
             subtotal,
           }, { transaction: t });
           

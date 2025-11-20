@@ -25,7 +25,7 @@ export default function Products() {
   const [q, setQ] = useState("");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
-  const [maxDistanceKm, setMaxDistanceKm] = useState("");
+  const [maxDistanceKm, setMaxDistanceKm] = useState(45); // Default 45km
   const [sort, setSort] = useState("");
 
   const [latLng, setLatLng] = useState(null);
@@ -36,7 +36,22 @@ export default function Products() {
       setLoading(true);
       setError(null);
       const res = await api.get("/products", { params });
-      setProducts(res.data.products || []);
+      const productsList = res.data.products || [];
+      
+      // Sort products: out-of-stock items last
+      const sortedProducts = productsList.sort((a, b) => {
+        const aOutOfStock = a.stock !== undefined && a.stock !== null && a.stock <= 0;
+        const bOutOfStock = b.stock !== undefined && b.stock !== null && b.stock <= 0;
+        
+        // If both are out of stock or both are in stock, maintain original order
+        if (aOutOfStock === bOutOfStock) return 0;
+        // If a is out of stock and b is not, a comes after b
+        if (aOutOfStock) return 1;
+        // If b is out of stock and a is not, b comes after a
+        return -1;
+      });
+      
+      setProducts(sortedProducts);
     } catch (err) {
       console.error('Failed to fetch products:', err);
       setError(err.response?.data?.error || 'Failed to load products. Please try again.');
@@ -83,9 +98,9 @@ export default function Products() {
         if (minPrice) params.minPrice = minPrice;
         if (maxPrice) params.maxPrice = maxPrice;
         if (sort) params.sort = sort;
-        if (maxDistanceKm) params.maxDistanceKm = maxDistanceKm;
         params.lat = newLatLng.lat;
         params.lng = newLatLng.lng;
+        params.maxDistanceKm = maxDistanceKm || 45; // Default 45km
         fetchProducts(params);
       }
     };
@@ -107,7 +122,14 @@ export default function Products() {
     // Fetch products immediately on mount (only once)
     if (!hasInitiallyFetchedRef.current) {
       hasInitiallyFetchedRef.current = true;
-      fetchProducts({});
+      const initialParams = {};
+      // If user has location, include it with default 45km distance
+      if (latLng) {
+        initialParams.lat = latLng.lat;
+        initialParams.lng = latLng.lng;
+        initialParams.maxDistanceKm = 45;
+      }
+      fetchProducts(initialParams);
     }
   }, [fetchProducts]); // Only run when fetchProducts changes (which is stable)
 
@@ -129,10 +151,11 @@ export default function Products() {
     if (minPrice) params.minPrice = minPrice;
     if (maxPrice) params.maxPrice = maxPrice;
     if (sort) params.sort = sort;
-    if (maxDistanceKm) params.maxDistanceKm = maxDistanceKm;
     if (latLng) {
       params.lat = latLng.lat;
       params.lng = latLng.lng;
+      // Always include maxDistanceKm when location is set (default 45km)
+      params.maxDistanceKm = maxDistanceKm || 45;
     }
     
     // Use debounced search for filter changes
@@ -211,8 +234,9 @@ export default function Products() {
         <input
           placeholder="Max Distance (km)"
           value={maxDistanceKm}
-          onChange={(e) => setMaxDistanceKm(e.target.value)}
+          onChange={(e) => setMaxDistanceKm(e.target.value ? Number(e.target.value) : 45)}
           type="number"
+          min="1"
           style={{ maxWidth: 150 }}
         />
         
@@ -255,6 +279,12 @@ export default function Products() {
           // Get first image (use images array if available, otherwise imageUrl)
           const firstImage = (p.images && p.images.length > 0) ? p.images[0] : p.imageUrl;
           
+          // Calculate star rating
+          const rating = p.ratingAvg || 0;
+          const reviewsCount = p.reviewsCount || 0;
+          const fullStars = Math.floor(rating);
+          const hasHalfStar = rating % 1 >= 0.5;
+          
           return (
             <div 
               key={p.id} 
@@ -266,9 +296,34 @@ export default function Products() {
                 boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
                 display: "flex",
                 flexDirection: "column",
-                gap: "12px"
+                gap: "12px",
+                position: "relative"
               }}
             >
+              {/* Clickable wrapper for entire card except button */}
+              <Link 
+                to={`/product/${p.id}`}
+                style={{
+                  textDecoration: "none",
+                  color: "inherit",
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: "60px", // Leave space for the button
+                  zIndex: 1,
+                  cursor: "pointer"
+                }}
+                onClick={(e) => {
+                  // Don't navigate if clicking on the button area
+                  const target = e.target;
+                  if (target.closest('button')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }
+                }}
+              />
+              
               {/* Product Image */}
               {firstImage && (
                 <img
@@ -278,17 +333,42 @@ export default function Products() {
                     width: "100%",
                     height: "200px",
                     objectFit: "cover",
-                    borderRadius: "8px"
+                    borderRadius: "8px",
+                    pointerEvents: "none"
                   }}
                 />
               )}
 
               {/* Product Title */}
-              <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "600" }}>
-                <Link to={`/product/${p.id}`} style={{ color: "inherit", textDecoration: "none" }}>
-                  {p.title}
-                </Link>
+              <h3 style={{ margin: 0, fontSize: "18px", fontWeight: "600", pointerEvents: "none" }}>
+                {p.title}
               </h3>
+
+              {/* Star Rating */}
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", pointerEvents: "none" }}>
+                <div style={{ display: "flex", gap: "2px" }}>
+                  {[1, 2, 3, 4, 5].map((star) => {
+                    if (rating === 0) {
+                      return <span key={star} style={{ fontSize: "16px", color: "#d1d5db" }}>☆</span>;
+                    }
+                    if (star <= fullStars) {
+                      return <span key={star} style={{ fontSize: "16px", color: "#fbbf24" }}>★</span>;
+                    }
+                    if (hasHalfStar && star === fullStars + 1) {
+                      // Show half star (we'll use a full star for simplicity, or could use a special character)
+                      return <span key={star} style={{ fontSize: "16px", color: "#fbbf24", opacity: 0.6 }}>★</span>;
+                    }
+                    return <span key={star} style={{ fontSize: "16px", color: "#d1d5db" }}>☆</span>;
+                  })}
+                </div>
+                {rating > 0 ? (
+                  <span style={{ fontSize: "14px", color: "#666", marginLeft: "4px" }}>
+                    {rating.toFixed(1)} ({reviewsCount} {reviewsCount === 1 ? 'review' : 'reviews'})
+                  </span>
+                ) : (
+                  <span style={{ fontSize: "14px", color: "#999" }}>No ratings yet</span>
+                )}
+              </div>
 
               {/* Description */}
               {p.description && (
@@ -300,14 +380,15 @@ export default function Products() {
                   WebkitLineClamp: 3,
                   WebkitBoxOrient: "vertical",
                   overflow: "hidden",
-                  lineHeight: "1.5"
+                  lineHeight: "1.5",
+                  pointerEvents: "none"
                 }}>
                   {p.description}
                 </p>
               )}
 
               {/* Price with discount indicator */}
-              <div style={{ marginTop: "auto" }}>
+              <div style={{ marginTop: "auto", pointerEvents: "none" }}>
                 {p.discount && p.discount > 0 ? (
                   <div>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px", flexWrap: "wrap" }}>
@@ -378,7 +459,24 @@ export default function Products() {
 
               {/* Add to Cart Button */}
               <button
-                onClick={() => {
+                style={{ 
+                  position: "relative", 
+                  zIndex: 2,
+                  marginTop: "8px",
+                  padding: "8px 16px",
+                  backgroundColor: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "#9ca3af" : "#3399cc",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "not-allowed" : "pointer",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  transition: "background 0.2s",
+                  width: "100%",
+                  opacity: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? 0.6 : 1
+                }}
+                onClick={(e) => {
+                  e.stopPropagation(); // Prevent card click
                   // Check if product is out of stock
                   if (p.stock !== undefined && p.stock !== null && p.stock <= 0) {
                     alert("This product is out of stock!");
@@ -412,20 +510,6 @@ export default function Products() {
                   alert("Added to cart!");
                 }}
                 disabled={p.stock !== undefined && p.stock !== null && p.stock <= 0}
-                style={{
-                  marginTop: "8px",
-                  padding: "8px 16px",
-                  backgroundColor: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "#9ca3af" : "#3399cc",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "6px",
-                  cursor: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "not-allowed" : "pointer",
-                  fontSize: "14px",
-                  fontWeight: "600",
-                  transition: "background 0.2s",
-                  width: "100%",
-                  opacity: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? 0.6 : 1
-                }}
                 onMouseEnter={(e) => {
                   if (!(p.stock !== undefined && p.stock !== null && p.stock <= 0)) {
                     e.target.style.backgroundColor = "#2a7ba0";

@@ -12,6 +12,14 @@ export default function Login() {
   const [role, setRole] = useState("customer");
   const [name, setName] = useState("");
   const [showRegister, setShowRegister] = useState(false);
+  
+  // OTP verification states
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [sendingOTP, setSendingOTP] = useState(false);
+  const [verifyingOTP, setVerifyingOTP] = useState(false);
+  const [otpError, setOtpError] = useState("");
 
   async function handleLogin() {
     try {
@@ -34,7 +42,50 @@ export default function Login() {
     }
   }
 
+  async function handleSendOTP() {
+    if (!email) {
+      alert("Please enter your email first");
+      return;
+    }
+
+    setSendingOTP(true);
+    setOtpError("");
+    try {
+      await api.post("/otp/send", { email });
+      setOtpSent(true);
+      alert("OTP sent to your email! Please check your inbox.");
+    } catch (err) {
+      setOtpError(err.response?.data?.error || "Failed to send OTP. Please try again.");
+    } finally {
+      setSendingOTP(false);
+    }
+  }
+
+  async function handleVerifyOTP() {
+    if (!otp || otp.length !== 6) {
+      setOtpError("Please enter a valid 6-digit OTP");
+      return;
+    }
+
+    setVerifyingOTP(true);
+    setOtpError("");
+    try {
+      await api.post("/otp/verify", { email, otp });
+      setOtpVerified(true);
+      alert("Email verified successfully! You can now register.");
+    } catch (err) {
+      setOtpError(err.response?.data?.error || "Invalid OTP. Please try again.");
+    } finally {
+      setVerifyingOTP(false);
+    }
+  }
+
   async function handleRegister() {
+    if (!otpVerified) {
+      alert("Please verify your email with OTP first");
+      return;
+    }
+
     try {
       const res = await api.post("/auth/register", {
         email,
@@ -57,8 +108,26 @@ export default function Login() {
         nav("/");
       }
     } catch (err) {
-      alert("Registration failed");
+      const errorMsg = err.response?.data?.error || "Registration failed";
+      alert(errorMsg);
     }
+  }
+
+  // Reset OTP states when switching between login/register
+  function handleShowRegister() {
+    setShowRegister(true);
+    setOtpSent(false);
+    setOtpVerified(false);
+    setOtp("");
+    setOtpError("");
+  }
+
+  function handleShowLogin() {
+    setShowRegister(false);
+    setOtpSent(false);
+    setOtpVerified(false);
+    setOtp("");
+    setOtpError("");
   }
 
   function handleGoogleSuccess(user) {
@@ -115,6 +184,80 @@ export default function Login() {
                   <option value="wholesaler">Wholesaler</option>
                 </select>
               </div>
+
+              {/* OTP Verification Section */}
+              <div style={{ marginTop: "20px", padding: "15px", backgroundColor: "#f0f9ff", borderRadius: "8px", border: "1px solid #3399cc" }}>
+                <p style={{ margin: "0 0 10px 0", fontSize: "14px", color: "#333" }}>
+                  Email verification required for registration
+                </p>
+                
+                {!otpSent && !otpVerified && (
+                  <button
+                    type="button"
+                    className="login-button"
+                    onClick={handleSendOTP}
+                    disabled={sendingOTP}
+                    style={{ width: "100%", marginBottom: "10px" }}
+                  >
+                    {sendingOTP ? "Sending OTP..." : "Send OTP to Email"}
+                  </button>
+                )}
+
+                {otpSent && !otpVerified && (
+                  <>
+                    <input
+                      className="login-input"
+                      placeholder="Enter 6-digit OTP"
+                      type="text"
+                      maxLength={6}
+                      value={otp}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, "");
+                        setOtp(value);
+                        setOtpError("");
+                      }}
+                      style={{ marginBottom: "10px" }}
+                    />
+                    <button
+                      type="button"
+                      className="login-button"
+                      onClick={handleVerifyOTP}
+                      disabled={verifyingOTP || otp.length !== 6}
+                      style={{ width: "100%", marginBottom: "10px" }}
+                    >
+                      {verifyingOTP ? "Verifying..." : "Verify OTP"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSendOTP}
+                      disabled={sendingOTP}
+                      style={{ 
+                        width: "100%", 
+                        background: "transparent", 
+                        border: "none", 
+                        color: "#3399cc", 
+                        cursor: "pointer",
+                        textDecoration: "underline",
+                        fontSize: "14px"
+                      }}
+                    >
+                      Resend OTP
+                    </button>
+                  </>
+                )}
+
+                {otpVerified && (
+                  <div style={{ color: "#28a745", fontSize: "14px", fontWeight: "bold" }}>
+                    ✓ Email verified successfully!
+                  </div>
+                )}
+
+                {otpError && (
+                  <div style={{ color: "#dc3545", fontSize: "13px", marginTop: "10px" }}>
+                    {otpError}
+                  </div>
+                )}
+              </div>
             </>
           )}
         </div>
@@ -132,6 +275,8 @@ export default function Login() {
             <button
               className="login-button login-button-register"
               onClick={handleRegister}
+              disabled={!otpVerified}
+              style={{ opacity: otpVerified ? 1 : 0.6, cursor: otpVerified ? "pointer" : "not-allowed" }}
             >
               Register
             </button>
@@ -146,7 +291,7 @@ export default function Login() {
                 className="login-register-link"
                 onClick={(e) => {
                   e.preventDefault();
-                  setShowRegister(true);
+                  handleShowRegister();
                 }}
               >
                 Register
@@ -172,7 +317,7 @@ export default function Login() {
               className="login-register-link"
               onClick={(e) => {
                 e.preventDefault();
-                setShowRegister(false);
+                handleShowLogin();
               }}
             >
               Login

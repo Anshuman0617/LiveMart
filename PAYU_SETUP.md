@@ -34,8 +34,24 @@ PAYU_SALT=your_salt_here
 PAYU_MODE=test
 
 # Success and Failure URLs (update with your domain)
-PAYU_SUCCESS_URL=http://localhost:5173/payment-success
-PAYU_FAILURE_URL=http://localhost:5173/payment-failure
+# ⚠️ IMPORTANT: PayU cannot access localhost URLs from their servers!
+# For local development, use ngrok or a similar tunneling service:
+# 1. Install ngrok: https://ngrok.com
+# 2. Run: ngrok http 3000
+# 3. Use the HTTPS URL provided by ngrok
+
+# For local development with ngrok (RECOMMENDED):
+# PAYU_SUCCESS_URL=https://your-ngrok-url.ngrok.io/payment-success
+# PAYU_FAILURE_URL=https://your-ngrok-url.ngrok.io/payment-failure
+
+# For local development without ngrok (may not work - PayU servers can't reach localhost):
+PAYU_SUCCESS_URL=http://localhost:3000/payment-success
+PAYU_FAILURE_URL=http://localhost:3000/payment-failure
+
+# Alternative: Set CLIENT_PORT if your client runs on a different port
+# CLIENT_PORT=5173
+# Or set the full base URL:
+# CLIENT_BASE_URL=http://localhost:5173
 
 # For Live Mode (Production) - uncomment and use these instead
 # PAYU_MERCHANT_KEY=your_live_merchant_key_here
@@ -123,11 +139,37 @@ This OTP requirement is only in test mode. In production, users will receive rea
 
 ### Troubleshooting
 
-1. **Payment not redirecting**: Check your SUCCESS_URL and FAILURE_URL in .env
+1. **Payment not redirecting / Page not found error**: 
+   - Check your `PAYU_SUCCESS_URL` and `PAYU_FAILURE_URL` in `.env`
+   - Ensure the URLs match your actual client URL (default is `http://localhost:3000`)
+   - Make sure your React app is running when testing
+   - Verify the routes `/payment-success` and `/payment-failure` exist in your React Router
+   - Check server logs for the actual URLs being sent to PayU
+
 2. **Hash verification failing**: Ensure your Salt is correct and matches the mode (test/live)
+
 3. **Payment page not loading**: Verify your Merchant Key is correct
+
 4. **Order not created**: Check backend logs for verification errors
+
 5. **OTP prompt during testing**: This is normal! Use `123456` as the OTP
+
+6. **"Page not found" after successful payment**:
+   - ⚠️ **MOST COMMON ISSUE**: PayU cannot access `localhost` URLs from their servers
+   - **Solution**: Use **ngrok** for local testing:
+     ```bash
+     # Install ngrok: https://ngrok.com
+     # Start your React app on port 3000
+     ngrok http 3000
+     # Copy the HTTPS URL and update .env:
+     PAYU_SUCCESS_URL=https://your-ngrok-url.ngrok.io/payment-success
+     PAYU_FAILURE_URL=https://your-ngrok-url.ngrok.io/payment-failure
+     ```
+   - Verify `PAYU_SUCCESS_URL` points to the correct URL where your React app is running
+   - Check that your React app is accessible at that URL
+   - Ensure React Router is properly configured with the `/payment-success` route
+   - Check browser console and network tab for any errors
+   - See `PAYU_TROUBLESHOOTING.md` for detailed troubleshooting steps
 
 For more help, refer to [PayU Documentation](https://docs.payu.in/)
 

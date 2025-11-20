@@ -124,9 +124,15 @@ export default function PaymentSuccess() {
           const updatedCart = cart
             .map(item => {
               const key = item.productId || item.id; // FIXED
-              const orderedQty = orderedQuantities.get(key) || 0;
+              let orderedQty = orderedQuantities.get(key) || 0;
 
               if (orderedQty > 0) {
+                // For wholesale orders, orderedQty is in multiples, but cart quantity is in units
+                // Convert orderedQty from multiples to units before subtracting
+                if (isWholesale && item.multiples && item.multiples > 1) {
+                  orderedQty = orderedQty * item.multiples;
+                }
+
                 const newQty = (item.quantity || 0) - orderedQty;
                 return newQty > 0 ? { ...item, quantity: newQty } : null;
               }
