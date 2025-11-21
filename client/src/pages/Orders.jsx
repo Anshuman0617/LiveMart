@@ -70,6 +70,16 @@ export default function Orders() {
     });
   };
 
+  const formatDateOnly = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric'
+    });
+  };
+
   // Separate orders into current (undelivered) and previous (delivered)
   const currentOrders = orders.filter(order => 
     order.status !== 'delivered' && order.status !== 'cancelled' && order.status !== 'fulfilled'
@@ -180,6 +190,20 @@ export default function Orders() {
                     <p style={{ margin: '4px 0', fontSize: '14px', color: '#6b7280' }}>
                       Ordered on: {formatDate(order.createdAt)}
                     </p>
+                    {order.scheduledPickupTime && (
+                      <div style={{ 
+                        margin: '8px 0', 
+                        padding: '8px 12px', 
+                        backgroundColor: '#dbeafe', 
+                        borderRadius: '6px',
+                        border: '1px solid #93c5fd',
+                        display: 'inline-block'
+                      }}>
+                        <p style={{ margin: 0, fontSize: '14px', color: '#1e40af', fontWeight: 600 }}>
+                          📅 Store Pickup: {formatDateOnly(order.scheduledPickupTime)}
+                        </p>
+                      </div>
+                    )}
                     <p style={{ margin: '4px 0', fontSize: '14px', color: '#6b7280' }}>
                       Status: <span style={{ 
                         color: order.status === 'confirmed' ? '#059669' : '#dc2626',
@@ -264,6 +288,11 @@ export default function Orders() {
                               return subtotal.toFixed(2);
                             })()}
                           </p>
+                          {order.scheduledPickupTime && (
+                            <p style={{ margin: '2px 0', fontSize: '11px', color: '#2563eb', fontWeight: 600 }}>
+                              📅 Store Pickup: {formatDateOnly(order.scheduledPickupTime)}
+                            </p>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -351,6 +380,20 @@ export default function Orders() {
                     <p style={{ margin: '4px 0', fontSize: '14px', color: '#6b7280' }}>
                       Ordered on: {formatDate(order.createdAt)}
                     </p>
+                    {order.scheduledPickupTime && (
+                      <div style={{ 
+                        margin: '8px 0', 
+                        padding: '8px 12px', 
+                        backgroundColor: '#dbeafe', 
+                        borderRadius: '6px',
+                        border: '1px solid #93c5fd',
+                        display: 'inline-block'
+                      }}>
+                        <p style={{ margin: 0, fontSize: '14px', color: '#1e40af', fontWeight: 600 }}>
+                          📅 Store Pickup: {formatDateOnly(order.scheduledPickupTime)}
+                        </p>
+                      </div>
+                    )}
                     <p style={{ margin: '4px 0', fontSize: '14px', color: '#059669', fontWeight: 600 }}>
                       ✓ Delivered
                     </p>
@@ -430,6 +473,11 @@ export default function Orders() {
                               return subtotal.toFixed(2);
                             })()}
                           </p>
+                          {order.scheduledPickupTime && (
+                            <p style={{ margin: '2px 0', fontSize: '11px', color: '#2563eb', fontWeight: 600 }}>
+                              📅 Store Pickup: {formatDateOnly(order.scheduledPickupTime)}
+                            </p>
+                          )}
                         </div>
                       </div>
                     ))}

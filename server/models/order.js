@@ -9,7 +9,8 @@ export default (sequelize) => {
     total: { type: DataTypes.DECIMAL(10,2), defaultValue: 0.00 },
     address: { type: DataTypes.TEXT, allowNull: true },
     paymentId: { type: DataTypes.STRING, allowNull: true },
-    paymentOrderId: { type: DataTypes.STRING, allowNull: true }
+    paymentOrderId: { type: DataTypes.STRING, allowNull: true },
+    scheduledPickupTime: { type: DataTypes.DATE, allowNull: true } // Scheduled pickup date/time for store orders
   }, {
     tableName: 'orders',
     timestamps: true

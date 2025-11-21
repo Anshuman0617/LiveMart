@@ -10,6 +10,7 @@ export default function WholesaleCart() {
   const [userPhone, setUserPhone] = useState("");
   const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
+  const [scheduledPickupTime, setScheduledPickupTime] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [orders, setOrders] = useState([]);
@@ -365,7 +366,14 @@ export default function WholesaleCart() {
       // Create PayU payment request
       const paymentRes = await api.post(
         "/payments/create-payment",
-        { items, address: userAddress, firstName, email, phone: userPhone },
+        { 
+          items, 
+          address: userAddress, 
+          firstName, 
+          email, 
+          phone: userPhone,
+          scheduledPickupTime: scheduledPickupTime || null
+        },
         { headers: authHeader() }
       );
 
@@ -377,6 +385,7 @@ export default function WholesaleCart() {
         txnId,
         items,
         address: userAddress,
+        scheduledPickupTime: scheduledPickupTime || null,
         isWholesale: true, // Flag to identify wholesale orders
       }));
 
@@ -777,6 +786,27 @@ export default function WholesaleCart() {
                 style={{ width: "100%", padding: "8px", marginBottom: 10 }}
                 required
               />
+            </div>
+
+            <div style={{ marginTop: 15 }}>
+              <p style={{ marginBottom: 5 }}>Schedule Pickup (Optional):</p>
+              <input
+                type="date"
+                value={scheduledPickupTime}
+                onChange={(e) => setScheduledPickupTime(e.target.value)}
+                min={new Date().toISOString().slice(0, 10)}
+                style={{ 
+                  width: "100%", 
+                  padding: "8px", 
+                  marginBottom: 10,
+                  border: "1px solid #ddd",
+                  borderRadius: "4px",
+                  fontSize: "14px"
+                }}
+              />
+              <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#6b7280" }}>
+                Select a date for store pickup. Leave empty for immediate processing.
+              </p>
             </div>
           </div>
 

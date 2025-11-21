@@ -55,6 +55,7 @@ export default function PaymentSuccess() {
             hash: hash || null,
             items: pendingOrder.items,
             address: pendingOrder.address || "",
+            scheduledPickupTime: pendingOrder.scheduledPickupTime || null,
           },
           { headers: authHeader() }
         );

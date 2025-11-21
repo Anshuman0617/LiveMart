@@ -11,6 +11,7 @@ export default function Cart() {
   const [userPhone, setUserPhone] = useState("");
   const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
+  const [scheduledPickupTime, setScheduledPickupTime] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [orders, setOrders] = useState([]);
@@ -287,7 +288,14 @@ export default function Cart() {
       // Create PayU payment request
       const paymentRes = await api.post(
         "/payments/create-payment",
-        { items, address: userAddress, firstName, email, phone: userPhone },
+        { 
+          items, 
+          address: userAddress, 
+          firstName, 
+          email, 
+          phone: userPhone,
+          scheduledPickupTime: scheduledPickupTime || null
+        },
         { headers: authHeader() }
       );
 
@@ -298,6 +306,7 @@ export default function Cart() {
         txnId,
         items,
         address: userAddress,
+        scheduledPickupTime: scheduledPickupTime || null,
         isWholesale: false, // Explicitly mark as regular cart order
       }));
 
@@ -339,6 +348,16 @@ export default function Cart() {
   const previousOrders = orders.filter(order => 
     order.status === 'delivered' || order.status === 'fulfilled'
   );
+
+  const formatDateOnly = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric'
+    });
+  };
 
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -697,6 +716,27 @@ export default function Cart() {
                 required
               />
             </div>
+
+            <div style={{ marginTop: 15 }}>
+              <p style={{ marginBottom: 5 }}>Schedule Pickup (Optional):</p>
+              <input
+                type="date"
+                value={scheduledPickupTime}
+                onChange={(e) => setScheduledPickupTime(e.target.value)}
+                min={new Date().toISOString().slice(0, 10)}
+                style={{ 
+                  width: "100%", 
+                  padding: "8px", 
+                  marginBottom: 10,
+                  border: "1px solid #ddd",
+                  borderRadius: "4px",
+                  fontSize: "14px"
+                }}
+              />
+              <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#6b7280" }}>
+                Select a date for store pickup. Leave empty for immediate processing.
+              </p>
+            </div>
           </div>
 
           <button
@@ -744,6 +784,20 @@ export default function Cart() {
                         <p style={{ margin: '4px 0', fontSize: '14px', color: '#6b7280' }}>
                           Ordered on: {formatDate(order.createdAt)}
                         </p>
+                        {order.scheduledPickupTime && (
+                          <div style={{ 
+                            margin: '8px 0', 
+                            padding: '8px 12px', 
+                            backgroundColor: '#dbeafe', 
+                            borderRadius: '6px',
+                            border: '1px solid #93c5fd',
+                            display: 'inline-block'
+                          }}>
+                            <p style={{ margin: 0, fontSize: '14px', color: '#1e40af', fontWeight: 600 }}>
+                              📅 Store Pickup: {formatDateOnly(order.scheduledPickupTime)}
+                            </p>
+                          </div>
+                        )}
                         <p style={{ margin: '4px 0', fontSize: '14px', color: '#6b7280' }}>
                           Status: <span style={{ 
                             color: order.status === 'confirmed' ? '#059669' : '#dc2626',
@@ -785,6 +839,11 @@ export default function Cart() {
                                   return subtotal.toFixed(2);
                                 })()}
                               </p>
+                              {order.scheduledPickupTime && (
+                                <p style={{ margin: '2px 0', fontSize: '11px', color: '#2563eb', fontWeight: 600 }}>
+                                  📅 Store Pickup: {formatDateOnly(order.scheduledPickupTime)}
+                                </p>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -819,6 +878,20 @@ export default function Cart() {
                         <p style={{ margin: '4px 0', fontSize: '14px', color: '#6b7280' }}>
                           Ordered on: {formatDate(order.createdAt)}
                         </p>
+                        {order.scheduledPickupTime && (
+                          <div style={{ 
+                            margin: '8px 0', 
+                            padding: '8px 12px', 
+                            backgroundColor: '#dbeafe', 
+                            borderRadius: '6px',
+                            border: '1px solid #93c5fd',
+                            display: 'inline-block'
+                          }}>
+                            <p style={{ margin: 0, fontSize: '14px', color: '#1e40af', fontWeight: 600 }}>
+                              📅 Store Pickup: {formatDateOnly(order.scheduledPickupTime)}
+                            </p>
+                          </div>
+                        )}
                         <p style={{ margin: '4px 0', fontSize: '14px', color: '#059669', fontWeight: 600 }}>
                           ✓ Delivered
                         </p>
@@ -866,6 +939,11 @@ export default function Cart() {
                                   return subtotal.toFixed(2);
                                 })()}
                               </p>
+                              {order.scheduledPickupTime && (
+                                <p style={{ margin: '2px 0', fontSize: '11px', color: '#2563eb', fontWeight: 600 }}>
+                                  📅 Store Pickup: {formatDateOnly(order.scheduledPickupTime)}
+                                </p>
+                              )}
                             </div>
                           </div>
                         ))}

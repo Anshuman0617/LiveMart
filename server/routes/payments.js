@@ -31,7 +31,7 @@ function generateHash(params, salt) {
 // Create PayU payment request
 router.post('/create-payment', authMiddleware, async (req, res) => {
   try {
-    const { items, address, firstName, email, phone } = req.body;
+    const { items, address, firstName, email, phone, scheduledPickupTime } = req.body;
     
     if (!items || !items.length) {
       return res.status(400).json({ error: 'No items in cart' });
@@ -135,6 +135,7 @@ router.post('/create-payment', authMiddleware, async (req, res) => {
       txnId: txnId,
       items: items,
       address: address,
+      scheduledPickupTime: scheduledPickupTime || null,
       amount: amount,
     });
   } catch (err) {
@@ -157,7 +158,8 @@ router.post('/verify-payment', authMiddleware, async (req, res) => {
       status, 
       hash,
       items,
-      address 
+      address,
+      scheduledPickupTime
     } = req.body;
 
     console.log('Payment verification request:', { 
@@ -359,6 +361,7 @@ router.post('/verify-payment', authMiddleware, async (req, res) => {
             address: address || '',
             paymentId: transactionId,
             paymentOrderId: transactionId,
+            scheduledPickupTime: scheduledPickupTime || null,
           }, { transaction: t });
 
           const orderItem = await OrderItem.create({
