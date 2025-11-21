@@ -23,16 +23,55 @@ export default function ProfileMenu({ user, onUserUpdate }) {
     return missingPhone || missingAddress;
   };
 
-  // Auto-open settings for new retailers/wholesalers
+  // Auto-open settings for new retailers/wholesalers (only on registration, not login)
   useEffect(() => {
-    if (user && isNewSeller() && !showSettings) {
-      // Small delay to ensure component is mounted
+    // Check if user was just registered (not just logged in)
+    const justRegistered = localStorage.getItem('justRegistered') === 'true';
+    
+    if (user && justRegistered && isNewSeller() && !showSettings) {
+      // Clear the flag AFTER opening settings to ensure it works
+      // Small delay to ensure component is fully mounted
       const timer = setTimeout(() => {
         setShowSettings(true);
-      }, 100);
+        // Clear flag after opening settings
+        localStorage.removeItem('justRegistered');
+      }, 500);
       return () => clearTimeout(timer);
+    } else if (justRegistered && user && !isNewSeller()) {
+      // User registered but already has phone/address - clear flag
+      localStorage.removeItem('justRegistered');
     }
   }, [user, showSettings]);
+
+  // Also check when userLogin event fires (in case component mounts before user is loaded)
+  useEffect(() => {
+    const handleUserLogin = () => {
+      // Small delay to ensure user state is updated in Navbar
+      setTimeout(() => {
+        const justRegistered = localStorage.getItem('justRegistered') === 'true';
+        const currentUser = JSON.parse(localStorage.getItem('user') || 'null');
+        
+        if (currentUser && justRegistered) {
+          const isSeller = currentUser.role === 'retailer' || currentUser.role === 'wholesaler';
+          const missingPhone = !currentUser.phone || currentUser.phone.trim() === '';
+          const missingAddress = !currentUser.address || currentUser.address.trim() === '';
+          const isNew = isSeller && (missingPhone || missingAddress);
+          
+          if (isNew && !showSettings) {
+            setShowSettings(true);
+            localStorage.removeItem('justRegistered');
+          } else if (!isNew) {
+            localStorage.removeItem('justRegistered');
+          }
+        }
+      }, 300);
+    };
+
+    window.addEventListener('userLogin', handleUserLogin);
+    return () => {
+      window.removeEventListener('userLogin', handleUserLogin);
+    };
+  }, [showSettings]);
 
   // Close menu when clicking outside
   useEffect(() => {

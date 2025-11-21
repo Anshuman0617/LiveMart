@@ -26,6 +26,8 @@ export default function Login() {
       const res = await api.post("/auth/login", { email, password });
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("user", JSON.stringify(res.data.user));
+      // Clear any registration flag (user is logging in, not registering)
+      localStorage.removeItem("justRegistered");
       // Dispatch event to update Navbar
       window.dispatchEvent(new Event('userLogin'));
       
@@ -96,6 +98,8 @@ export default function Login() {
 
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("user", JSON.stringify(res.data.user));
+      // Set flag to indicate user was just registered (for auto-opening profile settings)
+      localStorage.setItem("justRegistered", "true");
       // Dispatch event to update Navbar
       window.dispatchEvent(new Event('userLogin'));
       

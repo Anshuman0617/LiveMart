@@ -43,6 +43,8 @@ export default function GoogleLoginButton({ onSuccess }) {
               const res = await api.post('/auth/google', { idToken: response.credential });
               localStorage.setItem('token', res.data.token);
               localStorage.setItem('user', JSON.stringify(res.data.user));
+              // Clear any registration flag (user is logging in via Google, not registering)
+              localStorage.removeItem('justRegistered');
               // Dispatch event to update Navbar
               window.dispatchEvent(new Event('userLogin'));
 
