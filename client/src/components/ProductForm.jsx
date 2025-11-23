@@ -1,6 +1,7 @@
 // client/src/components/ProductForm.jsx
 import React, { useState, useEffect } from "react";
 import { api, authHeader } from "../api";
+import { useModal } from "../hooks/useModal";
 
 export default function ProductForm({
   initial = {},
@@ -9,6 +10,7 @@ export default function ProductForm({
   allowDiscount = true,
   onProductUpdate, // Callback to refresh product data after image deletion
 }) {
+  const { showModal, ModalComponent } = useModal();
   const [title, setTitle] = useState(initial.title || "");
   const [description, setDescription] = useState(initial.description || "");
   const [price, setPrice] = useState(initial.price || "");
@@ -36,14 +38,14 @@ export default function ProductForm({
     const remainingSlots = 6 - currentTotal;
     
     if (remainingSlots <= 0) {
-      alert("Maximum 6 images allowed. Please delete some images first.");
+      showModal("Maximum 6 images allowed. Please delete some images first.", "Image Limit", "warning");
       e.target.value = "";
       return;
     }
 
     const filesToAdd = files.slice(0, remainingSlots);
     if (files.length > remainingSlots) {
-      alert(`Only ${remainingSlots} image(s) can be added. Maximum 6 images total.`);
+      showModal(`Only ${remainingSlots} image(s) can be added. Maximum 6 images total.`, "Image Limit", "warning");
     }
 
     // Create preview URLs
@@ -79,7 +81,7 @@ export default function ProductForm({
       }
     } catch (err) {
       console.error("Failed to delete image:", err);
-      alert("Failed to delete image. Please try again.");
+      showModal("Failed to delete image. Please try again.", "Error", "error");
     }
   };
 
@@ -100,7 +102,7 @@ export default function ProductForm({
 
     const totalImages = existingImages.length + images.length;
     if (totalImages > 6) {
-      alert("Maximum 6 images allowed. Please remove some images.");
+      showModal("Maximum 6 images allowed. Please remove some images.", "Image Limit", "warning");
       return;
     }
 
@@ -129,7 +131,9 @@ export default function ProductForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} style={{ marginBottom: 40 }}>
+    <>
+      <ModalComponent />
+      <form onSubmit={handleSubmit} style={{ marginBottom: 40 }}>
       <div style={{
         backgroundColor: "#fff",
         border: "1px solid #e0e0e0",
@@ -830,5 +834,6 @@ export default function ProductForm({
         </div>
       </div>
     </form>
+    </>
   );
 }

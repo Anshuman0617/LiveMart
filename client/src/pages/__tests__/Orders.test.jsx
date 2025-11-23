@@ -23,6 +23,15 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
+// Mock useModal hook
+const mockShowModal = vi.fn();
+vi.mock('../../hooks/useModal', () => ({
+  useModal: () => ({
+    showModal: mockShowModal,
+    ModalComponent: () => null, // Return null component for tests
+  }),
+}));
+
 describe('Orders Page', () => {
   const mockOrders = [
     {
@@ -84,6 +93,7 @@ describe('Orders Page', () => {
   beforeEach(() => {
     localStorage.clear();
     mockNavigate.mockClear();
+    mockShowModal.mockClear();
     vi.clearAllMocks();
   });
 
@@ -387,6 +397,7 @@ describe('Orders Page', () => {
       const order = {
         ...mockOrders[0],
         status: 'confirmed',
+        trackingStatus: 'pending', // Ensure it's not already delivered
       };
       apiModule.api.get.mockResolvedValue({ data: [order] });
       apiModule.api.put.mockResolvedValue({
@@ -394,9 +405,6 @@ describe('Orders Page', () => {
           order: { ...order, status: 'delivered' },
         },
       });
-
-      // Mock window.alert
-      window.alert = vi.fn();
 
       render(
         <BrowserRouter>
@@ -408,8 +416,19 @@ describe('Orders Page', () => {
         expect(screen.getByText('Order #1')).toBeInTheDocument();
       });
 
+      // Wait a bit for the component to fully render
+      await waitFor(() => {
+        const markDeliveredButton = screen.getByText('Mark as Delivered');
+        expect(markDeliveredButton).toBeInTheDocument();
+      });
+
       const markDeliveredButton = screen.getByText('Mark as Delivered');
-      fireEvent.click(markDeliveredButton);
+      
+      await act(async () => {
+        fireEvent.click(markDeliveredButton);
+        // Wait for the async operation to complete
+        await new Promise(resolve => setTimeout(resolve, 100));
+      });
 
       await waitFor(() => {
         expect(apiModule.api.put).toHaveBeenCalledWith(
@@ -417,14 +436,18 @@ describe('Orders Page', () => {
           { status: 'delivered' },
           { headers: { Authorization: 'Bearer test-token' } }
         );
-        expect(window.alert).toHaveBeenCalledWith('Order status updated to delivered');
-      });
+      }, { timeout: 3000 });
+
+      await waitFor(() => {
+        expect(mockShowModal).toHaveBeenCalledWith('Order status updated to delivered', 'Success', 'success');
+      }, { timeout: 3000 });
     });
 
     it('updates order status back to confirmed', async () => {
       const order = {
         ...mockOrders[1],
         status: 'delivered',
+        trackingStatus: null, // Ensure tracking status doesn't interfere
       };
       apiModule.api.get.mockResolvedValue({ data: [order] });
       apiModule.api.put.mockResolvedValue({
@@ -432,9 +455,6 @@ describe('Orders Page', () => {
           order: { ...order, status: 'confirmed' },
         },
       });
-
-      // Mock window.alert
-      window.alert = vi.fn();
 
       render(
         <BrowserRouter>
@@ -446,8 +466,19 @@ describe('Orders Page', () => {
         expect(screen.getByText('Order #2')).toBeInTheDocument();
       });
 
+      // Wait a bit for the component to fully render
+      await waitFor(() => {
+        const setBackButton = screen.getByText('Set Back to Undelivered');
+        expect(setBackButton).toBeInTheDocument();
+      });
+
       const setBackButton = screen.getByText('Set Back to Undelivered');
-      fireEvent.click(setBackButton);
+      
+      await act(async () => {
+        fireEvent.click(setBackButton);
+        // Wait for the async operation to complete
+        await new Promise(resolve => setTimeout(resolve, 100));
+      });
 
       await waitFor(() => {
         expect(apiModule.api.put).toHaveBeenCalledWith(
@@ -455,8 +486,11 @@ describe('Orders Page', () => {
           { status: 'confirmed' },
           { headers: { Authorization: 'Bearer test-token' } }
         );
-        expect(window.alert).toHaveBeenCalledWith('Order status updated to confirmed');
-      });
+      }, { timeout: 3000 });
+
+      await waitFor(() => {
+        expect(mockShowModal).toHaveBeenCalledWith('Order status updated to confirmed', 'Success', 'success');
+      }, { timeout: 3000 });
     });
 
     it('handles error when updating order status fails', async () => {
@@ -468,6 +502,7 @@ describe('Orders Page', () => {
         const order = {
           ...mockOrders[0],
           status: 'confirmed',
+          trackingStatus: 'pending', // Ensure it's not already delivered
         };
         apiModule.api.get.mockResolvedValue({ data: [order] });
         apiModule.api.put.mockRejectedValue({
@@ -475,9 +510,6 @@ describe('Orders Page', () => {
             data: { error: 'Failed to update order' },
           },
         });
-
-        // Mock window.alert
-        window.alert = vi.fn();
 
         render(
           <BrowserRouter>
@@ -489,12 +521,23 @@ describe('Orders Page', () => {
           expect(screen.getByText('Order #1')).toBeInTheDocument();
         });
 
+        // Wait a bit for the component to fully render
+        await waitFor(() => {
+          const markDeliveredButton = screen.getByText('Mark as Delivered');
+          expect(markDeliveredButton).toBeInTheDocument();
+        });
+
         const markDeliveredButton = screen.getByText('Mark as Delivered');
-        fireEvent.click(markDeliveredButton);
+        
+        await act(async () => {
+          fireEvent.click(markDeliveredButton);
+          // Wait for the async operation to complete
+          await new Promise(resolve => setTimeout(resolve, 100));
+        });
 
         await waitFor(() => {
-          expect(window.alert).toHaveBeenCalledWith('Failed to update order');
-        });
+          expect(mockShowModal).toHaveBeenCalledWith('Failed to update order', 'Error', 'error');
+        }, { timeout: 3000 });
       } finally {
         // Restore console.error
         console.error = originalError;

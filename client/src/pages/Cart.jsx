@@ -3,8 +3,10 @@ import React, { useState, useEffect } from "react";
 import { api, authHeader } from "../api";
 import AddressAutocomplete from "../components/AddressAutocomplete";
 import { useNavigate, Link } from "react-router-dom";
+import { useModal } from "../hooks/useModal";
 
 export default function Cart() {
+  const { showModal, ModalComponent } = useModal();
   const [cart, setCart] = useState([]);
   const [cartItems, setCartItems] = useState([]); // Cart items with full product details
   const [userAddress, setUserAddress] = useState("");
@@ -16,6 +18,8 @@ export default function Cart() {
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [orders, setOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
+  const [currentOrdersExpanded, setCurrentOrdersExpanded] = useState(true);
+  const [previousOrdersExpanded, setPreviousOrdersExpanded] = useState(true);
   const navigate = useNavigate();
 
   // Load cart items with full product details
@@ -40,7 +44,8 @@ export default function Cart() {
               product: product,
               discount: product.discount || 0,
               imageUrl: product.imageUrl || (product.images && product.images[0]) || null,
-              description: product.description || ''
+              description: product.description || '',
+              title: product.title || item.title || ''
             };
           } catch (err) {
             console.error(`Failed to load product ${item.productId}:`, err);
@@ -49,7 +54,8 @@ export default function Cart() {
               product: null,
               discount: 0,
               imageUrl: null,
-              description: ''
+              description: '',
+              title: item.title || ''
             };
           }
         })
@@ -57,7 +63,7 @@ export default function Cart() {
       setCartItems(itemsWithDetails);
     } catch (err) {
       console.error("Failed to load cart products:", err);
-      setCartItems(c.map(item => ({ ...item, product: null, discount: 0, imageUrl: null, description: '' })));
+      setCartItems(c.map(item => ({ ...item, product: null, discount: 0, imageUrl: null, description: '', title: item.title || '' })));
     } finally {
       setLoadingProducts(false);
     }
@@ -68,7 +74,7 @@ export default function Cart() {
     
     // Listen for cart cleared events (from payment success)
     const handleCartCleared = (event) => {
-      if (!event.detail.isWholesale) {
+      if (!event.detail?.isWholesale) {
         // Reload cart after it's been cleared
         const user = JSON.parse(localStorage.getItem('user') || 'null');
         const userId = user?.id;
@@ -87,7 +93,7 @@ export default function Cart() {
     };
   }, [loadCart]); // Include loadCart in dependencies
   
-  // Load user's saved address and details
+  // Load user's saved address and details (and listen for login/logout/profile updates)
   const loadUserDetails = React.useCallback(async () => {
     try {
       const res = await api.get("/users/me");
@@ -107,42 +113,87 @@ export default function Cart() {
     } catch (err) {
       // User not logged in or error - that's okay
       console.log("Could not load user details:", err);
+      // Clear profile fields when not logged in
+      // (optional) Comment out if you prefer to keep last-known values
+      // setUserAddress("");
+      // setUserPhone("");
+      // setFirstName("");
+      // setEmail("");
     }
   }, []);
 
   useEffect(() => {
+    // Run once to populate profile fields
     loadUserDetails();
 
-    // Listen for userLogin event to reload user details when profile is updated
+    // Handlers need to be stable for removeEventListener -> define inside effect
     const handleUserUpdate = () => {
+      loadUserDetails();
+    };
+
+    const handleUserLoginForCart = () => {
+      // When user logs in, reload cart (restores saved cart)
+      loadCart();
+      // Also reload user details
       loadUserDetails();
     };
 
     window.addEventListener('userLogin', handleUserUpdate);
     window.addEventListener('userLogout', handleUserUpdate);
-
-    // Load user orders
-    const loadOrders = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        if (token) {
-          const ordersRes = await api.get('/orders', { headers: authHeader() });
-          setOrders(ordersRes.data || []);
-        }
-      } catch (err) {
-        console.log("Could not load orders:", err);
-        setOrders([]);
-      } finally {
-        setLoadingOrders(false);
-      }
-    };
-    loadOrders();
+    window.addEventListener('userLogin', handleUserLoginForCart);
 
     return () => {
       window.removeEventListener('userLogin', handleUserUpdate);
       window.removeEventListener('userLogout', handleUserUpdate);
+      window.removeEventListener('userLogin', handleUserLoginForCart);
     };
-  }, [loadUserDetails]);
+  }, [loadUserDetails, loadCart]);
+
+  // Orders-only effect (Option B): fetch orders and listen for updates + auth changes
+  useEffect(() => {
+    let mounted = true;
+
+    const loadOrders = async () => {
+      if (mounted) setLoadingOrders(true);
+      try {
+        const token = localStorage.getItem('token');
+        if (token) {
+          const ordersRes = await api.get('/orders', { headers: authHeader() });
+          if (mounted) setOrders(ordersRes.data || []);
+        } else {
+          if (mounted) setOrders([]);
+        }
+      } catch (err) {
+        console.log("Could not load orders:", err);
+        if (mounted) setOrders([]);
+      } finally {
+        if (mounted) setLoadingOrders(false);
+      }
+    };
+
+    // Initial load
+    loadOrders();
+
+    // Respond to external order updates (seller dashboard, webhooks, etc.)
+    const handleOrderStatusUpdate = () => loadOrders();
+    const handleUserLogin = () => loadOrders(); // reload when user logs in
+    const handleUserLogout = () => {
+      // clear orders on logout
+      setOrders([]);
+      setLoadingOrders(false);
+    };
+
+    window.addEventListener('orderStatusUpdated', handleOrderStatusUpdate);
+    window.addEventListener('userLogin', handleUserLogin);
+    window.addEventListener('userLogout', handleUserLogout);
+
+    return () => {
+      mounted = false;
+      window.removeEventListener('orderStatusUpdated', handleOrderStatusUpdate);
+      window.removeEventListener('userLogin', handleUserLogin);
+      window.removeEventListener('userLogout', handleUserLogout);
+    };
+  }, []); // run once on mount
 
   const updateCart = async (c, skipReload = false) => {
     setCart(c);
@@ -165,7 +216,8 @@ export default function Cart() {
                 product: product,
                 discount: product.discount || 0,
                 imageUrl: product.imageUrl || (product.images && product.images[0]) || null,
-                description: product.description || ''
+                description: product.description || '',
+                title: product.title || item.title || ''
               };
             } catch (err) {
               console.error(`Failed to load product ${item.productId}:`, err);
@@ -174,7 +226,8 @@ export default function Cart() {
                 product: null,
                 discount: 0,
                 imageUrl: null,
-                description: ''
+                description: '',
+                title: item.title || ''
               };
             }
           })
@@ -182,7 +235,7 @@ export default function Cart() {
         setCartItems(itemsWithDetails);
       } catch (err) {
         console.error("Failed to load cart products:", err);
-        setCartItems(c.map(item => ({ ...item, product: null, discount: 0, imageUrl: null, description: '' })));
+        setCartItems(c.map(item => ({ ...item, product: null, discount: 0, imageUrl: null, description: '', title: item.title || '' })));
       } finally {
         setLoadingProducts(false);
       }
@@ -208,7 +261,7 @@ export default function Cart() {
       const maxQuantity = Math.min(10, cartItem?.product?.stock || 10);
       
       if (item.quantity >= maxQuantity) {
-        alert(`Maximum ${maxQuantity} items allowed for this product.`);
+        showModal(`Maximum ${maxQuantity} items allowed for this product.`, "Quantity Limit", "warning");
         return;
       }
       
@@ -248,31 +301,31 @@ export default function Cart() {
 
   const handleCheckout = async () => {
     if (cart.length === 0) {
-      alert("Your cart is empty!");
+      showModal("Your cart is empty!", "Empty Cart", "warning");
       return;
     }
 
     // Check if user is logged in
     const token = localStorage.getItem("token");
     if (!token) {
-      alert("Please log in to proceed with checkout");
+      showModal("Please log in to proceed with checkout", "Login Required", "warning");
       navigate("/login");
       return;
     }
 
     // Validate address and phone from profile
     if (!userAddress.trim()) {
-      alert("Please set your address in profile settings before checkout");
+      showModal("Please set your address in profile settings before checkout", "Address Required", "warning");
       return;
     }
 
     if (!userPhone.trim()) {
-      alert("Please set your phone number in profile settings before checkout");
+      showModal("Please set your phone number in profile settings before checkout", "Phone Required", "warning");
       return;
     }
 
     if (!firstName.trim() || !email.trim()) {
-      alert("Please fill in all required details (Name, Email)");
+      showModal("Please fill in all required details (Name, Email)", "Details Required", "warning");
       return;
     }
 
@@ -333,21 +386,29 @@ export default function Cart() {
       }, 1000);
     } catch (err) {
       console.error("Checkout error:", err);
-      alert(
+      showModal(
         err.response?.data?.error ||
-          "Failed to initiate payment. Please try again."
+          "Failed to initiate payment. Please try again.",
+        "Payment Error",
+        "error"
       );
       setLoading(false);
     }
   };
 
   // Separate orders into current (undelivered) and previous (delivered)
-  const currentOrders = orders.filter(order => 
-    order.status !== 'delivered' && order.status !== 'cancelled' && order.status !== 'fulfilled'
-  );
-  const previousOrders = orders.filter(order => 
-    order.status === 'delivered' || order.status === 'fulfilled'
-  );
+  // Include orders with trackingStatus === 'delivered' in previous orders
+  const currentOrders = orders.filter(order => {
+    const isDelivered = order.status === 'delivered' || order.status === 'fulfilled';
+    const isTrackingDelivered = order.trackingStatus === 'delivered';
+    const isCancelled = order.status === 'cancelled';
+    return !isDelivered && !isTrackingDelivered && !isCancelled;
+  });
+  const previousOrders = orders.filter(order => {
+    const isDelivered = order.status === 'delivered' || order.status === 'fulfilled';
+    const isTrackingDelivered = order.trackingStatus === 'delivered';
+    return isDelivered || isTrackingDelivered;
+  });
 
   const formatDateOnly = (dateString) => {
     if (!dateString) return 'N/A';
@@ -357,6 +418,25 @@ export default function Cart() {
       month: 'short', 
       day: 'numeric'
     });
+  };
+
+  const markOrderReceived = async (orderId) => {
+    try {
+      const res = await api.put(
+        `/orders/${orderId}/mark-received`,
+        {},
+        { headers: authHeader() }
+      );
+      
+      // Reload orders to get updated tracking status
+      const ordersRes = await api.get('/orders', { headers: authHeader() });
+      setOrders(ordersRes.data || []);
+      
+      showModal('Order receipt confirmed', 'Success', 'success');
+    } catch (err) {
+      console.error('Failed to mark order as received:', err);
+      showModal(err.response?.data?.error || 'Failed to confirm receipt', 'Error', 'error');
+    }
   };
 
   const formatDate = (dateString) => {
@@ -373,6 +453,7 @@ export default function Cart() {
 
   return (
     <div className="App">
+      <ModalComponent />
       <h2>Your Cart</h2>
 
       {loadingProducts && <p>Loading cart items...</p>}
@@ -425,7 +506,7 @@ export default function Cart() {
                   onClick={(e) => {
                     // Don't navigate if clicking on buttons
                     const target = e.target;
-                    if (target.closest('button')) {
+                    if (target.closest && target.closest('button')) {
                       e.preventDefault();
                       e.stopPropagation();
                     }
@@ -694,7 +775,7 @@ export default function Cart() {
             </div>
 
             <div style={{ marginTop: 15 }}>
-              <p style={{ marginBottom: 5 }}>Name: *</p>
+              <p style={{ marginBottom: 5 }}>Name (for order processing): *</p>
               <input
                 type="text"
                 value={firstName}
@@ -706,7 +787,7 @@ export default function Cart() {
             </div>
 
             <div>
-              <p style={{ marginBottom: 5 }}>Email: *</p>
+              <p style={{ marginBottom: 5 }}>Email (for payment processing): *</p>
               <input
                 type="email"
                 value={email}
@@ -764,8 +845,32 @@ export default function Cart() {
           {/* Current Orders (Undelivered) */}
           {currentOrders.length > 0 && (
             <div style={{ marginTop: '40px' }}>
-              <h2 style={{ marginBottom: '20px' }}>Orders</h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', cursor: 'pointer' }} onClick={() => setCurrentOrdersExpanded(!currentOrdersExpanded)}>
+                <h2 style={{ margin: 0 }}>Orders ({currentOrders.length})</h2>
+                <button
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '24px',
+                    cursor: 'pointer',
+                    color: '#6b7280',
+                    padding: '0',
+                    width: '30px',
+                    height: '30px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCurrentOrdersExpanded(!currentOrdersExpanded);
+                  }}
+                >
+                  {currentOrdersExpanded ? '−' : '+'}
+                </button>
+              </div>
+              {currentOrdersExpanded && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {currentOrders.map((order) => (
                   <div
                     key={order.id}
@@ -784,6 +889,11 @@ export default function Cart() {
                         <p style={{ margin: '4px 0', fontSize: '14px', color: '#6b7280' }}>
                           Ordered on: {formatDate(order.createdAt)}
                         </p>
+                        {order.paymentOrderId && (
+                          <p style={{ margin: '4px 0', fontSize: '13px', color: '#6b7280' }}>
+                            Transaction ID: <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{order.paymentOrderId}</span>
+                          </p>
+                        )}
                         {order.scheduledPickupTime && (
                           <div style={{ 
                             margin: '8px 0', 
@@ -806,6 +916,72 @@ export default function Cart() {
                             {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                           </span>
                         </p>
+                        {/* Tracking Status - Show delivery status for regular orders, pickup status for store pickup */}
+                        {order.scheduledPickupTime ? (
+                          <div style={{ 
+                            margin: '8px 0', 
+                            padding: '8px 12px', 
+                            backgroundColor: (order.trackingStatus === 'delivered') ? '#d1fae5' : '#f3f4f6',
+                            borderRadius: '6px',
+                            border: `1px solid ${(order.trackingStatus === 'delivered') ? '#10b981' : '#d1d5db'}`,
+                            display: 'inline-block'
+                          }}>
+                            <p style={{ margin: 0, fontSize: '14px', color: (order.trackingStatus === 'delivered') ? '#065f46' : '#374151', fontWeight: 600 }}>
+                              {(order.trackingStatus === 'delivered') ? '✓ Picked Up' : '📦 Pending Pickup'}
+                            </p>
+                            {order.deliveredAt && (
+                              <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
+                                Picked up: {formatDate(order.deliveredAt)}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ 
+                            margin: '8px 0', 
+                            padding: '8px 12px', 
+                            backgroundColor: (order.trackingStatus === 'out_for_delivery') ? '#fef3c7' : (order.trackingStatus === 'delivered') ? '#d1fae5' : '#f3f4f6',
+                            borderRadius: '6px',
+                            border: `1px solid ${(order.trackingStatus === 'out_for_delivery') ? '#fbbf24' : (order.trackingStatus === 'delivered') ? '#10b981' : '#d1d5db'}`,
+                            display: 'inline-block'
+                          }}>
+                            <p style={{ margin: 0, fontSize: '14px', color: (order.trackingStatus === 'out_for_delivery') ? '#92400e' : (order.trackingStatus === 'delivered') ? '#065f46' : '#374151', fontWeight: 600 }}>
+                              {(order.trackingStatus === 'out_for_delivery') ? '🚚 Out for Delivery' : (order.trackingStatus === 'delivered') ? '✓ Delivered' : '📦 Pending Delivery'}
+                            </p>
+                            {order.outForDelivery && (
+                              <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
+                                Out: {formatDate(order.outForDelivery)}
+                              </p>
+                            )}
+                            {order.deliveredAt && (
+                              <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
+                                Delivered: {formatDate(order.deliveredAt)}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        {/* Delivery Person Information */}
+                        {order.deliveryPerson && !order.scheduledPickupTime && (
+                          <div style={{ 
+                            margin: '8px 0', 
+                            padding: '8px 12px', 
+                            backgroundColor: '#eff6ff',
+                            borderRadius: '6px',
+                            border: '1px solid #bfdbfe',
+                            display: 'inline-block'
+                          }}>
+                            <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#1e40af' }}>
+                              🚚 Delivery Person:
+                            </p>
+                            <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#1e3a8a' }}>
+                              {order.deliveryPerson.name || order.deliveryPerson.email}
+                            </p>
+                            {order.deliveryPerson.phone && (
+                              <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#3b82f6' }}>
+                                📞 {order.deliveryPerson.phone}
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <p style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>
@@ -849,17 +1025,81 @@ export default function Cart() {
                         ))}
                       </div>
                     </div>
+
+                    {/* Mark Received button for consumers - Only for delivered orders (delivery person already marked it) */}
+                    {order.trackingStatus === 'delivered' && order.deliveryType === 'retailer_to_consumer' && !order.scheduledPickupTime && (
+                      <div style={{ marginTop: '12px' }}>
+                        <div style={{ 
+                          padding: '12px', 
+                          backgroundColor: '#f0fdf4', 
+                          borderRadius: '6px', 
+                          border: '1px solid #86efac',
+                          marginBottom: '12px'
+                        }}>
+                          <p style={{ margin: '0 0 4px 0', fontSize: '13px', fontWeight: 600, color: '#166534' }}>
+                            ✓ Order Delivered
+                          </p>
+                          <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#374151' }}>
+                            Your order has been delivered. Please confirm receipt.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => markOrderReceived(order.id)}
+                          style={{
+                            padding: '10px 20px',
+                            backgroundColor: '#10b981',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: 600,
+                            transition: 'background 0.2s',
+                            width: '100%'
+                          }}
+                          onMouseEnter={(e) => e.target.style.backgroundColor = '#059669'}
+                          onMouseLeave={(e) => e.target.style.backgroundColor = '#10b981'}
+                        >
+                          Confirm Receipt
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
-              </div>
+                </div>
+              )}
             </div>
           )}
 
           {/* Previous Orders (Delivered) */}
           {previousOrders.length > 0 && (
             <div style={{ marginTop: '40px' }}>
-              <h2 style={{ marginBottom: '20px' }}>Previous Orders</h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', cursor: 'pointer' }} onClick={() => setPreviousOrdersExpanded(!previousOrdersExpanded)}>
+                <h2 style={{ margin: 0 }}>Previous Orders ({previousOrders.length})</h2>
+                <button
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '24px',
+                    cursor: 'pointer',
+                    color: '#6b7280',
+                    padding: '0',
+                    width: '30px',
+                    height: '30px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPreviousOrdersExpanded(!previousOrdersExpanded);
+                  }}
+                >
+                  {previousOrdersExpanded ? '−' : '+'}
+                </button>
+              </div>
+              {previousOrdersExpanded && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {previousOrders.map((order) => (
                   <div
                     key={order.id}
@@ -878,6 +1118,11 @@ export default function Cart() {
                         <p style={{ margin: '4px 0', fontSize: '14px', color: '#6b7280' }}>
                           Ordered on: {formatDate(order.createdAt)}
                         </p>
+                        {order.paymentOrderId && (
+                          <p style={{ margin: '4px 0', fontSize: '13px', color: '#6b7280' }}>
+                            Transaction ID: <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{order.paymentOrderId}</span>
+                          </p>
+                        )}
                         {order.scheduledPickupTime && (
                           <div style={{ 
                             margin: '8px 0', 
@@ -892,9 +1137,77 @@ export default function Cart() {
                             </p>
                           </div>
                         )}
-                        <p style={{ margin: '4px 0', fontSize: '14px', color: '#059669', fontWeight: 600 }}>
-                          ✓ Delivered
-                        </p>
+                        {/* Tracking Status - Show delivery status for regular orders, pickup status for store pickup */}
+                        {order.scheduledPickupTime ? (
+                          <div style={{ 
+                            margin: '8px 0', 
+                            padding: '8px 12px', 
+                            backgroundColor: (order.trackingStatus === 'delivered') ? '#d1fae5' : '#f3f4f6',
+                            borderRadius: '6px',
+                            border: `1px solid ${(order.trackingStatus === 'delivered') ? '#10b981' : '#d1d5db'}`,
+                            display: 'inline-block'
+                          }}>
+                            <p style={{ margin: 0, fontSize: '14px', color: (order.trackingStatus === 'delivered') ? '#065f46' : '#374151', fontWeight: 600 }}>
+                              {(order.trackingStatus === 'delivered') ? '✓ Picked Up' : '📦 Pending Pickup'}
+                            </p>
+                            {order.deliveredAt && (
+                              <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
+                                Picked up: {formatDate(order.deliveredAt)}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ 
+                            margin: '8px 0', 
+                            padding: '8px 12px', 
+                            backgroundColor: (order.trackingStatus === 'out_for_delivery') ? '#fef3c7' : (order.trackingStatus === 'delivered') ? '#d1fae5' : '#f3f4f6',
+                            borderRadius: '6px',
+                            border: `1px solid ${(order.trackingStatus === 'out_for_delivery') ? '#fbbf24' : (order.trackingStatus === 'delivered') ? '#10b981' : '#d1d5db'}`,
+                            display: 'inline-block'
+                          }}>
+                            <p style={{ margin: 0, fontSize: '14px', color: (order.trackingStatus === 'out_for_delivery') ? '#92400e' : (order.trackingStatus === 'delivered') ? '#065f46' : '#374151', fontWeight: 600 }}>
+                              {(order.trackingStatus === 'out_for_delivery') ? '🚚 Out for Delivery' : (order.trackingStatus === 'delivered') ? '✓ Delivered' : '📦 Pending Delivery'}
+                            </p>
+                            {order.outForDelivery && (
+                              <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
+                                Out: {formatDate(order.outForDelivery)}
+                              </p>
+                            )}
+                            {order.deliveredAt && (
+                              <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
+                                Delivered: {formatDate(order.deliveredAt)}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        {/* Delivery Person Information */}
+                        {order.deliveryPerson && !order.scheduledPickupTime && (
+                          <div style={{ 
+                            margin: '8px 0', 
+                            padding: '8px 12px', 
+                            backgroundColor: '#eff6ff',
+                            borderRadius: '6px',
+                            border: '1px solid #bfdbfe',
+                            display: 'inline-block'
+                          }}>
+                            <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#1e40af' }}>
+                              🚚 Delivery Person:
+                            </p>
+                            <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#1e3a8a' }}>
+                              {order.deliveryPerson.name || order.deliveryPerson.email}
+                            </p>
+                            {order.deliveryPerson.phone && (
+                              <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#3b82f6' }}>
+                                📞 {order.deliveryPerson.phone}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        {order.status === 'delivered' && (
+                          <p style={{ margin: '4px 0', fontSize: '14px', color: '#059669', fontWeight: 600 }}>
+                            ✓ Delivered
+                          </p>
+                        )}
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <p style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>
@@ -950,8 +1263,9 @@ export default function Cart() {
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
+                ))} 
+                </div>
+              )}
             </div>
           )}
 

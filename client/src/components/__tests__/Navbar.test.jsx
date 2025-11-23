@@ -148,7 +148,8 @@ describe('Navbar', () => {
     // Check that localStorage is cleared
     expect(localStorage.getItem('token')).toBeNull();
     expect(localStorage.getItem('user')).toBeNull();
-    expect(localStorage.getItem('cart_1')).toBeNull();
+    // Cart should be preserved per user (not cleared on logout)
+    expect(localStorage.getItem('cart_1')).toBe('[{"productId":1,"quantity":1}]');
     
     // Check that navigation to login page was called
     expect(mockNavigate).toHaveBeenCalledWith('/login', { replace: true });

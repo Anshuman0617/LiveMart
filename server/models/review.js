@@ -7,7 +7,9 @@ export default (sequelize) => {
     userId: { type: DataTypes.INTEGER, allowNull: false },
     productId: { type: DataTypes.INTEGER, allowNull: false },
     rating: { type: DataTypes.INTEGER, allowNull: false }, // 1..5
-    text: { type: DataTypes.TEXT, allowNull: true }
+    text: { type: DataTypes.TEXT, allowNull: true },
+    retailerResponse: { type: DataTypes.TEXT, allowNull: true }, // Response from retailer
+    retailerResponseAt: { type: DataTypes.DATE, allowNull: true } // When retailer responded
   }, {
     tableName: 'reviews',
     timestamps: true

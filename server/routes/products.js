@@ -163,14 +163,46 @@ if (q) {
     }
 
     // ---------- SORT ----------
-    if (sort === 'price_asc') data.sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
-    else if (sort === 'price_desc') data.sort((a, b) => parseFloat(b.price) - parseFloat(a.price));
-    else if (sort === 'most_sold') data.sort((a, b) => b.soldCount - a.soldCount);
-    else if (sort === 'distance') data.sort((a, b) => {
-      const da = a.distanceMeters ?? Infinity;
-      const db = b.distanceMeters ?? Infinity;
-      return da - db;
-    });
+    if (sort === 'price_asc') {
+      data.sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
+    } else if (sort === 'price_desc') {
+      data.sort((a, b) => parseFloat(b.price) - parseFloat(a.price));
+    } else if (sort === 'rating_desc') {
+      // Highest rated first, then by number of reviews (more reviews first)
+      data.sort((a, b) => {
+        const aRating = parseFloat(a.ratingAvg || 0);
+        const bRating = parseFloat(b.ratingAvg || 0);
+        if (bRating !== aRating) {
+          return bRating - aRating;
+        }
+        const aCount = parseInt(a.reviewsCount || 0, 10);
+        const bCount = parseInt(b.reviewsCount || 0, 10);
+        return bCount - aCount;
+      });
+    } else if (sort === 'most_sold') {
+      data.sort((a, b) => b.soldCount - a.soldCount);
+    } else if (sort === 'distance') {
+      data.sort((a, b) => {
+        const da = a.distanceMeters ?? Infinity;
+        const db = b.distanceMeters ?? Infinity;
+        return da - db;
+      });
+    } else if (sort === 'discounted') {
+      // Sort by discount: products with discount first, then by discount percentage (highest first)
+      data.sort((a, b) => {
+        const aDiscount = parseFloat(a.discount || 0);
+        const bDiscount = parseFloat(b.discount || 0);
+        // If both have discounts, sort by discount percentage (descending)
+        if (aDiscount > 0 && bDiscount > 0) {
+          return bDiscount - aDiscount;
+        }
+        // If only one has discount, put it first
+        if (aDiscount > 0) return -1;
+        if (bDiscount > 0) return 1;
+        // If neither has discount, maintain original order
+        return 0;
+      });
+    }
 
     res.json({ products: data, page, pageSize });
   } catch (err) {
@@ -192,7 +224,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
     const p = await Product.findByPk(productId, {
       include: [
         { model: User, as: 'owner',
-          attributes: ['id','name','role','picture','address','lat','lng']
+          attributes: ['id','name','role','picture','address','lat','lng','email','phone']
         }
       ]
     });
@@ -289,9 +321,21 @@ router.put(
 
       const payload = req.body;
 
+      // Convert string values to appropriate types (FormData sends everything as strings)
+      if (payload.price !== undefined) {
+        payload.price = parseFloat(payload.price) || 0;
+      }
+      if (payload.stock !== undefined) {
+        payload.stock = parseInt(payload.stock) || 0;
+      }
+      if (payload.discount !== undefined) {
+        payload.discount = parseFloat(payload.discount) || 0;
+      }
+
       // Wholesalers cannot set discount
-      if (p.ownerType === 'wholesaler' && payload.discount)
+      if (p.ownerType === 'wholesaler' && payload.discount && parseFloat(payload.discount) > 0) {
         return res.status(400).json({ error: "Wholesalers cannot set discount" });
+      }
 
       // Parse multiples if provided (for wholesalers)
       if (payload.multiples !== undefined) {

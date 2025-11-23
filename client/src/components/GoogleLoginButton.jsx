@@ -62,7 +62,7 @@ export default function GoogleLoginButton({ onSuccess }) {
             } catch (err) {
               console.error('Google sign-in error:', err);
               const errorMsg = err.response?.data?.error || 'Google sign-in failed';
-              alert(errorMsg);
+              showModal(errorMsg, "Login Error", "error");
             }
           },
         });
@@ -91,7 +91,7 @@ export default function GoogleLoginButton({ onSuccess }) {
 
   const handleGoogleSignIn = () => {
     if (!isReady) {
-      alert('Google Sign-In is not ready yet. Please wait a moment.');
+      showModal('Google Sign-In is not ready yet. Please wait a moment.', "Not Ready", "warning");
       return;
     }
 
@@ -105,7 +105,7 @@ export default function GoogleLoginButton({ onSuccess }) {
       if (googleObj) {
         googleObj.prompt();
       } else {
-        alert('Google Sign-In is not available. Please refresh the page.');
+        showModal('Google Sign-In is not available. Please refresh the page.', "Error", "error");
       }
     }
   };

@@ -88,14 +88,8 @@ export default function ProfileMenu({ user, onUserUpdate }) {
   }, [showMenu]);
 
   const handleLogout = () => {
-    // Clear user-specific cart data
-    const userId = user?.id;
-    if (userId) {
-      localStorage.removeItem(`cart_${userId}`);
-      localStorage.removeItem(`wholesaleCart_${userId}`);
-    }
-    localStorage.removeItem('cart');
-    localStorage.removeItem('wholesaleCart');
+    // Note: Cart data is preserved per user (cart_${userId} and wholesaleCart_${userId})
+    // so users can log back in and find their cart intact
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     window.dispatchEvent(new Event('userLogout'));
@@ -216,7 +210,7 @@ export default function ProfileMenu({ user, onUserUpdate }) {
           onClose={() => {
             // Prevent closing if user is a new seller without phone/address
             if (isNewSeller()) {
-              alert('Please set your phone number and address before closing. These are required for retailers and wholesalers.');
+              showModal('Please set your phone number and address before closing. These are required for retailers and wholesalers.', "Required Information", "warning");
               return;
             }
             setShowSettings(false);

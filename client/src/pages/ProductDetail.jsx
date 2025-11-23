@@ -1,25 +1,40 @@
 // client/src/pages/ProductDetail.jsx
 import React, { useEffect, useState } from "react";
-import { api } from "../api";
+import { api, authHeader } from "../api";
 import { useParams } from "react-router-dom";
 import Reviews from "../components/Reviews";
+import Questions from "../components/Questions";
+import { trackProductView } from "../utils/browsingHistory.js";
+import { useModal } from "../hooks/useModal";
 
 export default function ProductDetail() {
   const { id } = useParams();
+  const { showModal, ModalComponent } = useModal();
   const [p, setP] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
-  const [showModal, setShowModal] = useState(false);
+  const [showImageModal, setShowImageModal] = useState(false);
   const [mainImageIndex, setMainImageIndex] = useState(0);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [error, setError] = useState(null);
+  const [quantity, setQuantity] = useState("");
 
   useEffect(() => {
     setError(null);
     api.get(`/products/${id}`)
       .then((res) => {
-        setP(res.data);
+        const product = res.data;
+        setP(product);
         // Reset main image index when product changes
         setMainImageIndex(0);
+        
+        // Track product view for recommendations
+        if (product) {
+          trackProductView(
+            product.id,
+            product.category || 'Others',
+            product.ownerType || 'retailer'
+          );
+        }
       })
       .catch((err) => {
         if (err.response?.status === 403) {
@@ -74,11 +89,11 @@ export default function ProductDetail() {
 
   const openModal = (imageUrl) => {
     setSelectedImage(imageUrl);
-    setShowModal(true);
+    setShowImageModal(true);
   };
 
   const closeModal = () => {
-    setShowModal(false);
+    setShowImageModal(false);
     setSelectedImage(null);
   };
 
@@ -89,16 +104,106 @@ export default function ProductDetail() {
   // Get current user
   const user = JSON.parse(localStorage.getItem('user') || 'null');
   const isRegularUser = !user || (user.role !== 'retailer' && user.role !== 'wholesaler');
+  const isRetailer = user && user.role === 'retailer';
+  const isWholesalerProduct = p ? p.ownerType === 'wholesaler' : false;
 
-  const handleAddToCart = () => {
+  const addToRetailerList = async (productId) => {
+    try {
+      const res = await api.post(`/products/${productId}/add-to-retailer-list`, {}, {
+        headers: authHeader()
+      });
+      showModal(res.data.message || "Product added to your product list!", "Success", "success");
+    } catch (err) {
+      console.error("Failed to add product to list:", err);
+      showModal(err.response?.data?.error || "Failed to add product to your list. Please try again.", "Error", "error");
+    }
+  };
+
+  const addToWholesaleCart = () => {
     if (!user) {
-      alert("Please login to add items to cart");
+      showModal("Please login to add items to cart", "Login Required", "warning");
       return;
     }
 
     // Check if product is out of stock
     if (p.stock !== undefined && p.stock !== null && p.stock <= 0) {
-      alert("This product is out of stock!");
+      showModal("This product is out of stock!", "Out of Stock", "warning");
+      return;
+    }
+
+    const numMultiples = parseInt(quantity || 1, 10); // Number of multiples user wants to order
+    if (numMultiples < 1) {
+      showModal("Quantity must be at least 1", "Invalid Quantity", "warning");
+      return;
+    }
+
+    const multiples = p.multiples || 1;
+    const maxMultiples = p.stock || 0; // Stock is in multiples
+    const totalUnitsAvailable = maxMultiples * multiples; // Total units available
+    const totalUnitsOrdered = numMultiples * multiples; // Total units user wants to order
+    
+    // Validate that user doesn't exceed available stock (in multiples)
+    if (numMultiples > maxMultiples) {
+      showModal(`Only ${maxMultiples} multiple${maxMultiples !== 1 ? 's' : ''} (${totalUnitsAvailable} units) available in stock.`, "Stock Limit", "warning");
+      setQuantity("");
+      return;
+    }
+
+    // Get user-specific wholesale cart
+    const userId = user.id;
+    const cartKey = userId ? `wholesaleCart_${userId}` : 'wholesaleCart';
+    const cart = JSON.parse(localStorage.getItem(cartKey) || "[]");
+    const existing = cart.find((c) => c.productId === p.id);
+
+    if (existing) {
+      // existing.quantity is in units, existing.multiples is the size
+      const existingUnits = existing.quantity || 0;
+      const newTotalUnits = existingUnits + totalUnitsOrdered;
+      const newTotalMultiples = newTotalUnits / multiples;
+      
+      // Check if new total is a valid multiple
+      if (newTotalUnits % multiples !== 0) {
+        const nextValidUnits = Math.ceil(newTotalUnits / multiples) * multiples;
+        const nextValidMultiples = nextValidUnits / multiples;
+        if (nextValidMultiples > maxMultiples) {
+          showModal(`Cannot add ${numMultiples} multiple${numMultiples !== 1 ? 's' : ''} (${totalUnitsOrdered} units). The total quantity would be ${newTotalUnits} units, which is not a multiple of ${multiples}. The next valid quantity (${nextValidUnits} units = ${nextValidMultiples} multiples) exceeds available stock (${maxMultiples} multiples = ${totalUnitsAvailable} units).`, "Stock Limit Exceeded", "warning");
+          setQuantity("");
+          return;
+        }
+        showModal(`Adding ${numMultiples} multiple${numMultiples !== 1 ? 's' : ''} (${totalUnitsOrdered} units) would result in ${newTotalUnits} total units, which is not a multiple of ${multiples}. Adjusting to ${nextValidUnits} units (${nextValidMultiples} multiples).`, "Quantity Adjusted", "info");
+        existing.quantity = nextValidUnits;
+      } else if (newTotalMultiples > maxMultiples) {
+        showModal(`Only ${maxMultiples} multiple${maxMultiples !== 1 ? 's' : ''} (${totalUnitsAvailable} units) available in stock. You already have ${existingUnits} units (${existingUnits / multiples} multiples) in your cart.`, "Stock Limit", "warning");
+        setQuantity("");
+        return;
+      } else {
+        existing.quantity = newTotalUnits;
+      }
+    } else {
+      cart.push({
+        productId: p.id,
+        title: p.title,
+        price: p.price,
+        quantity: totalUnitsOrdered, // Store as actual units
+        multiples: multiples, // Store the size of each multiple
+      });
+    }
+
+    localStorage.setItem(cartKey, JSON.stringify(cart));
+    showModal("Added to wholesale cart!", "Success", "success");
+    // Reset quantity input
+    setQuantity("");
+  };
+
+  const handleAddToCart = () => {
+    if (!user) {
+      showModal("Please login to add items to cart", "Login Required", "warning");
+      return;
+    }
+
+    // Check if product is out of stock
+    if (p.stock !== undefined && p.stock !== null && p.stock <= 0) {
+      showModal("This product is out of stock!", "Out of Stock", "warning");
       return;
     }
     
@@ -111,7 +216,7 @@ export default function ProductDetail() {
 
     if (existing) {
       if (existing.quantity >= maxQuantity) {
-        alert(`Maximum ${maxQuantity} items allowed for this product.`);
+        showModal(`Maximum ${maxQuantity} items allowed for this product.`, "Quantity Limit", "warning");
         return;
       }
       existing.quantity++;
@@ -125,11 +230,12 @@ export default function ProductDetail() {
     }
 
     localStorage.setItem(cartKey, JSON.stringify(cart));
-    alert("Added to cart!");
+    showModal("Added to cart!", "Success", "success");
   };
 
   return (
     <div className="App">
+      <ModalComponent />
       {/* Main Container: Image Gallery and Product Info */}
       <div
         style={{
@@ -261,9 +367,21 @@ export default function ProductDetail() {
               <strong>Discount:</strong> {p.discount}%
             </p>
           )}
-          <p style={{ margin: "0 0 12px 0" }}>
-            <strong>Sold:</strong> {p.soldCount}
-          </p>
+          {/* Retailer details for consumers (hide sold count) */}
+          {(() => {
+            const user = JSON.parse(localStorage.getItem('user') || 'null');
+            const isConsumer = !user || user.role === 'customer';
+            
+            if (!isConsumer && p.soldCount !== undefined) {
+              // Show sold count for retailers/wholesalers only
+              return (
+                <p style={{ margin: "0 0 12px 0" }}>
+                  <strong>Sold:</strong> {p.soldCount}
+                </p>
+              );
+            }
+            return null;
+          })()}
 
           {/* Stock indicator */}
           {p.stock !== undefined && p.stock !== null && (() => {
@@ -333,6 +451,127 @@ export default function ProductDetail() {
               {(p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "Out of Stock" : "Add to Cart"}
             </button>
           )}
+
+          {/* Quantity and Add to Cart - For retailers viewing wholesaler products */}
+          {isRetailer && isWholesalerProduct && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ 
+                display: "flex", 
+                gap: "10px", 
+                alignItems: "center", 
+                flexDirection: "column"
+              }}>
+                <div style={{ display: "flex", gap: "10px", alignItems: "center", width: "100%" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "4px", flex: 1 }}>
+                    <input
+                      type="number"
+                      min="1"
+                      max={p.stock || undefined}
+                      placeholder={p.multiples && p.multiples > 1 ? "No. of multiples" : "Qty"}
+                      step="1"
+                      disabled={p.stock !== undefined && p.stock !== null && p.stock <= 0}
+                      style={{ 
+                        width: "80px",
+                        padding: "8px",
+                        border: "1px solid #ddd",
+                        borderRadius: "6px",
+                        fontSize: "14px",
+                        opacity: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? 0.6 : 1,
+                        cursor: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "not-allowed" : "text"
+                      }}
+                      value={quantity}
+                      onChange={(e) => {
+                        if (p.stock !== undefined && p.stock !== null && p.stock <= 0) {
+                          return;
+                        }
+                        const val = e.target.value;
+                        if (!val) {
+                          setQuantity("");
+                          return;
+                        }
+                        const numVal = parseInt(val);
+                        const maxMultiples = p.stock || 0; // Stock is in multiples
+                        
+                        // Validate that user doesn't exceed available stock (in multiples)
+                        if (numVal > maxMultiples) {
+                          const multiples = p.multiples || 1;
+                          const totalUnits = maxMultiples * multiples;
+                          showModal(`Only ${maxMultiples} multiple${maxMultiples !== 1 ? 's' : ''} (${totalUnits} units) available in stock.`, "Stock Limit", "warning");
+                          return;
+                        }
+                        
+                        // Allow any positive integer - user is entering number of multiples
+                        setQuantity(val);
+                      }}
+                    />
+                    {p.multiples && p.multiples > 1 && quantity && (
+                      <p style={{ margin: 0, fontSize: "11px", color: "#6b7280" }}>
+                        = {parseInt(quantity) * p.multiples} units
+                      </p>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: "8px", width: "100%" }}>
+                    <button 
+                      onClick={addToRetailerList.bind(null, p.id)}
+                      style={{
+                        padding: "8px 12px",
+                        backgroundColor: "#22c55e",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "6px",
+                        cursor: "pointer",
+                        fontSize: "12px",
+                        fontWeight: "600",
+                        transition: "background 0.2s",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                      }}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = "#16a34a"}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = "#22c55e"}
+                      title="Add to My Products List"
+                    >
+                      +
+                    </button>
+                    <button 
+                      onClick={addToWholesaleCart}
+                      disabled={p.stock !== undefined && p.stock !== null && p.stock <= 0}
+                      style={{
+                        flex: 1,
+                        padding: "8px 16px",
+                        backgroundColor: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "#9ca3af" : "#3399cc",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "6px",
+                        cursor: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "not-allowed" : "pointer",
+                        fontSize: "14px",
+                        fontWeight: "600",
+                        transition: "background 0.2s",
+                        opacity: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? 0.6 : 1
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!(p.stock !== undefined && p.stock !== null && p.stock <= 0)) {
+                          e.target.style.backgroundColor = "#2a7ba0";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!(p.stock !== undefined && p.stock !== null && p.stock <= 0)) {
+                          e.target.style.backgroundColor = "#3399cc";
+                        }
+                      }}
+                    >
+                      {(p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "Out of Stock" : "Add to Cart"}
+                    </button>
+                  </div>
+                </div>
+                {p.multiples && p.multiples > 1 && (
+                  <p style={{ margin: "4px 0", fontSize: "11px", color: "#6b7280", width: "100%" }}>
+                    Enter number of multiples (each multiple = {p.multiples} units)
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -342,7 +581,7 @@ export default function ProductDetail() {
       </div>
 
       {/* Image Modal */}
-      {showModal && selectedImage && (
+      {showImageModal && selectedImage && (
         <div
           style={{
             position: "fixed",
@@ -482,6 +721,7 @@ export default function ProductDetail() {
               href={`https://www.google.com/maps/search/?api=1&query=${p.owner.lat},${p.owner.lng}`}
               target="_blank"
               rel="noreferrer"
+              style={{ color: '#3399cc', textDecoration: 'underline' }}
             >
               Open in Google Maps
             </a>
@@ -489,10 +729,50 @@ export default function ProductDetail() {
         </div>
       )}
 
-      <br />
-      <br />
+      {/* Retailer Contact Information */}
+      {p.owner && p.ownerType === 'retailer' && (
+        <div style={{ marginTop: 16, padding: '12px', backgroundColor: '#f0f9ff', borderRadius: '6px', border: '1px solid #bfdbfe' }}>
+          <p style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 600, color: '#1e40af' }}>
+            📞 Contact Retailer
+          </p>
+          {p.owner.phone && (
+            <p style={{ margin: '4px 0', fontSize: '14px' }}>
+              <strong>Phone:</strong> <a href={`tel:${p.owner.phone}`} style={{ color: '#3399cc', textDecoration: 'none' }}>{p.owner.phone}</a>
+            </p>
+          )}
+          {p.owner.email && (
+            <p style={{ margin: '4px 0', fontSize: '14px' }}>
+              <strong>Email:</strong> <a href={`mailto:${p.owner.email}`} style={{ color: '#3399cc', textDecoration: 'none' }}>{p.owner.email}</a>
+            </p>
+          )}
+        </div>
+      )}
 
-      <Reviews productId={p.id} allowReviewForm={isRegularUser} />
+      {/* Questions & Answers Section - Hide for retailers viewing wholesaler products */}
+      {!(isRetailer && isWholesalerProduct) && (
+        <>
+          <br />
+          <br />
+          <Questions 
+            productId={p.id} 
+            productOwnerId={p.ownerId}
+            allowQuestionForm={isRegularUser} 
+          />
+        </>
+      )}
+
+      {/* Reviews Section - Hide for retailers viewing wholesaler products */}
+      {!(isRetailer && isWholesalerProduct) && (
+        <>
+          <br />
+          <br />
+          <Reviews 
+            productId={p.id} 
+            allowReviewForm={isRegularUser}
+            productOwnerId={p.ownerId}
+          />
+        </>
+      )}
     </div>
   );
 }

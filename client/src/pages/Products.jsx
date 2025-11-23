@@ -3,12 +3,19 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { api, authHeader } from "../api";
 import { Link, useNavigate } from "react-router-dom";
 import debounce from "lodash.debounce";
+import { personalizeProductList, generateRecommendations } from "../utils/recommendations.js";
+import { getTopCategories } from "../utils/browsingHistory.js";
+import { useModal } from "../hooks/useModal";
 
 // Products page - accessible to all users (including unauthenticated)
 export default function Products() {
+  const { showModal, ModalComponent } = useModal();
   const [products, setProducts] = useState([]);
+  const [recommendedProducts, setRecommendedProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [orders, setOrders] = useState([]);
+  const [showRecommendations, setShowRecommendations] = useState(true);
   const navigate = useNavigate();
   
   // Check if user is a retailer - they shouldn't see regular products
@@ -53,15 +60,28 @@ export default function Products() {
         return -1;
       });
       
-      setProducts(sortedProducts);
+      // Personalize product list based on user history
+      const user = JSON.parse(localStorage.getItem('user') || 'null');
+      if (user && orders.length > 0) {
+        const personalized = personalizeProductList(sortedProducts, orders, 'retailer');
+        setProducts(personalized);
+        
+        // Generate recommendations (top 4 only)
+        const recommendations = generateRecommendations(sortedProducts, orders, 'retailer', 4);
+        setRecommendedProducts(recommendations);
+      } else {
+        setProducts(sortedProducts);
+        setRecommendedProducts([]);
+      }
     } catch (err) {
       console.error('Failed to fetch products:', err);
       setError(err.response?.data?.error || 'Failed to load products. Please try again.');
       setProducts([]);
+      setRecommendedProducts([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [orders]);
 
   const debouncedSearch = useCallback(
     debounce((params) => fetchProducts(params), 300),
@@ -85,9 +105,25 @@ export default function Products() {
     return null;
   }, []);
 
+  // Load user orders for personalization
+  const loadOrders = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (token) {
+        const ordersRes = await api.get('/orders', { headers: authHeader() });
+        setOrders(ordersRes.data || []);
+      }
+    } catch (err) {
+      // User not logged in or error - that's okay
+      console.log("Could not load orders for personalization:", err);
+      setOrders([]);
+    }
+  }, []);
+
   useEffect(() => {
     loadUserProfile();
-  }, [loadUserProfile]);
+    loadOrders();
+  }, [loadUserProfile, loadOrders]);
 
   // Listen for userLogin event to reload location when address is updated
   useEffect(() => {
@@ -178,19 +214,20 @@ export default function Products() {
             lat: newLatLng.lat,
             lng: newLatLng.lng,
           }, { headers: authHeader() });
-          alert("Location saved! This will be used for distance calculations.");
+          showModal("Location saved! This will be used for distance calculations.", "Location Saved", "success");
         } catch (err) {
           console.error("Failed to save location:", err);
-          alert("Failed to save location. Please try again.");
+          showModal("Failed to save location. Please try again.", "Error", "error");
         }
       },
-      () => alert("Failed to access location")
+      () => showModal("Failed to access location", "Location Error", "error")
     );
   };
 
 
   return (
     <div className="App">
+      <ModalComponent />
       <h1>Products</h1>
 
       {/* Filters */}
@@ -319,8 +356,10 @@ export default function Products() {
             <option value="">None</option>
             <option value="price_asc">Price ↑</option>
             <option value="price_desc">Price ↓</option>
+            <option value="rating_desc">Highest Rated</option>
             <option value="most_sold">Most Sold</option>
             <option value="distance">Closest</option>
+            <option value="discounted">Discounted</option>
           </select>
         </div>
 
@@ -446,6 +485,241 @@ export default function Products() {
       {loading && !error && (
         <div style={{ padding: '20px', textAlign: 'center' }}>
           <p>Loading products...</p>
+        </div>
+      )}
+
+      {/* Recommendations Section */}
+      {!loading && !error && recommendedProducts.length > 0 && showRecommendations && (
+        <div style={{ marginBottom: '50px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+            <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 600, color: '#3b82f6' }}>
+              ⭐ Recommended for You
+            </h2>
+            <button
+              onClick={() => setShowRecommendations(false)}
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '14px',
+                color: '#6b7280',
+                cursor: 'pointer',
+                textDecoration: 'underline'
+              }}
+            >
+              Hide
+            </button>
+          </div>
+          <div style={{ 
+            display: "grid", 
+            gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", 
+            gap: "20px"
+          }}>
+            {recommendedProducts.map((p) => {
+              const firstImage = (p.images && p.images.length > 0) ? p.images[0] : p.imageUrl;
+              const rating = p.ratingAvg || 0;
+              const reviewsCount = p.reviewsCount || 0;
+              const fullStars = Math.floor(rating);
+              const hasHalfStar = rating % 1 >= 0.5;
+              
+              return (
+                <div 
+                  key={p.id} 
+                  style={{
+                    border: "2px solid #3b82f6",
+                    borderRadius: "12px",
+                    padding: "16px",
+                    backgroundColor: "#fff",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "12px",
+                    position: "relative"
+                  }}
+                >
+                  {/* Clickable wrapper for entire card except button */}
+                  <Link 
+                    to={`/product/${p.id}`}
+                    style={{
+                      textDecoration: "none",
+                      color: "inherit",
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: "60px", // Leave space for the button
+                      zIndex: 1
+                    }}
+                  />
+                  {firstImage && (
+                    <img
+                      src={`http://localhost:4000${firstImage}`}
+                      alt={p.title}
+                      style={{
+                        width: "100%",
+                        height: "200px",
+                        objectFit: "cover",
+                        borderRadius: "8px",
+                        position: "relative",
+                        zIndex: 0
+                      }}
+                    />
+                  )}
+                  <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 600, position: "relative", zIndex: 0 }}>
+                    {p.title}
+                  </h3>
+                  <p style={{ margin: 0, color: "#666", fontSize: "14px", position: "relative", zIndex: 0 }}>
+                    {p.description?.substring(0, 100)}...
+                  </p>
+                  <div style={{ position: "relative", zIndex: 0 }}>
+                    {p.discount > 0 ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontSize: "20px", fontWeight: "bold", color: "#dc2626" }}>
+                          ₹{parseFloat(p.price * (1 - p.discount / 100)).toFixed(2)}
+                        </span>
+                        <span style={{ 
+                          color: "#666", 
+                          textDecoration: "line-through",
+                          fontSize: "14px"
+                        }}>
+                          ₹{parseFloat(p.price).toFixed(2)}
+                        </span>
+                        <span style={{ 
+                          backgroundColor: "#dc2626",
+                          color: "white",
+                          padding: "2px 8px",
+                          borderRadius: "4px",
+                          fontSize: "12px",
+                          fontWeight: 600
+                        }}>
+                          {parseFloat(p.discount).toFixed(0)}% OFF
+                        </span>
+                      </div>
+                    ) : (
+                      <p style={{ margin: "4px 0", fontSize: "20px", fontWeight: "bold", color: "#3399cc" }}>
+                        ₹{parseFloat(p.price).toFixed(2)}
+                      </p>
+                    )}
+                  </div>
+                  {rating > 0 && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px", position: "relative", zIndex: 0 }}>
+                      {[...Array(5)].map((_, i) => (
+                        <span key={i} style={{ color: i < fullStars ? "#fbbf24" : "#d1d5db" }}>
+                          ★
+                        </span>
+                      ))}
+                      <span style={{ fontSize: "12px", color: "#666", marginLeft: "4px" }}>
+                        ({reviewsCount})
+                      </span>
+                    </div>
+                  )}
+                  {/* Stock indicator */}
+                  {p.stock !== undefined && p.stock !== null && (
+                    <p style={{ margin: "4px 0", fontSize: "14px", color: "#666", position: "relative", zIndex: 0 }}>
+                      <strong>Stock:</strong> {p.stock} units
+                    </p>
+                  )}
+                  {/* Availability date for out-of-stock items */}
+                  {p.stock <= 0 && p.availabilityDate && (
+                    <p style={{ margin: "4px 0", fontSize: "13px", color: "#2563eb", fontWeight: 600, position: "relative", zIndex: 0 }}>
+                      📅 Back in stock: {new Date(p.availabilityDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                    </p>
+                  )}
+                  {/* Add to Cart Button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      const user = JSON.parse(localStorage.getItem('user') || 'null');
+                      const userId = user?.id;
+                      const cartKey = userId ? `cart_${userId}` : 'cart';
+                      const cart = JSON.parse(localStorage.getItem(cartKey) || "[]");
+                      const existing = cart.find((c) => c.productId === p.id);
+
+                      if (existing) {
+                        existing.quantity += 1;
+                      } else {
+                        cart.push({
+                          productId: p.id,
+                          title: p.title,
+                          price: p.price,
+                          quantity: 1,
+                        });
+                      }
+
+                      localStorage.setItem(cartKey, JSON.stringify(cart));
+                      showModal("Added to cart!", "Success", "success");
+                    }}
+                    disabled={p.stock !== undefined && p.stock !== null && p.stock <= 0}
+                    style={{
+                      padding: "10px 20px",
+                      backgroundColor: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "#9ca3af" : "#3399cc",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "6px",
+                      cursor: (p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "not-allowed" : "pointer",
+                      fontSize: "16px",
+                      fontWeight: 600,
+                      position: "relative",
+                      zIndex: 2,
+                      marginTop: "auto"
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!(p.stock !== undefined && p.stock !== null && p.stock <= 0)) {
+                        e.target.style.backgroundColor = "#2a7ba0";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!(p.stock !== undefined && p.stock !== null && p.stock <= 0)) {
+                        e.target.style.backgroundColor = "#3399cc";
+                      }
+                    }}
+                  >
+                    {(p.stock !== undefined && p.stock !== null && p.stock <= 0) ? "Out of Stock" : "Add to Cart"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Separator between Recommendations and General Products */}
+      {!loading && !error && recommendedProducts.length > 0 && products.length > 0 && (
+        <div style={{ 
+          marginBottom: '30px', 
+          padding: '20px 0',
+          borderTop: '2px solid #e5e7eb',
+          borderBottom: '2px solid #e5e7eb',
+          backgroundColor: '#f9fafb'
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+            <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 600, color: '#374151', textAlign: 'center' }}>
+              All Products
+            </h2>
+            <p style={{ margin: 0, fontSize: '14px', color: '#6b7280', textAlign: 'center' }}>
+              Browse all available products below
+            </p>
+            {!showRecommendations && (
+              <button
+                onClick={() => setShowRecommendations(true)}
+                style={{
+                  marginTop: '8px',
+                  padding: '8px 16px',
+                  backgroundColor: '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: 600
+                }}
+                onMouseEnter={(e) => e.target.style.backgroundColor = '#2563eb'}
+                onMouseLeave={(e) => e.target.style.backgroundColor = '#3b82f6'}
+              >
+                Show Recommendations
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -652,11 +926,34 @@ export default function Products() {
                   </p>
                 )}
 
-                {p.soldCount !== undefined && (
-                  <p style={{ margin: "4px 0", fontSize: "12px", color: "#999" }}>
-                    <strong>Sold:</strong> {p.soldCount}
-                  </p>
-                )}
+                {/* Retailer details for consumers (hide sold count) */}
+                {(() => {
+                  const user = JSON.parse(localStorage.getItem('user') || 'null');
+                  const isConsumer = !user || user.role === 'customer';
+                  
+                  if (isConsumer && p.owner) {
+                    return (
+                      <div style={{ margin: "4px 0" }}>
+                        <p style={{ margin: "2px 0", fontSize: "12px", color: "#666" }}>
+                          <strong>Retailer:</strong> {p.owner.name || 'N/A'}
+                        </p>
+                        {p.owner.address && (
+                          <p style={{ margin: "2px 0", fontSize: "11px", color: "#999" }}>
+                            {p.owner.address.length > 40 ? `${p.owner.address.substring(0, 40)}...` : p.owner.address}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  } else if (!isConsumer && p.soldCount !== undefined) {
+                    // Show sold count for retailers/wholesalers
+                    return (
+                      <p style={{ margin: "4px 0", fontSize: "12px", color: "#999" }}>
+                        <strong>Sold:</strong> {p.soldCount}
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
               {/* Add to Cart Button */}
@@ -681,7 +978,7 @@ export default function Products() {
                   e.stopPropagation(); // Prevent card click
                   // Check if product is out of stock
                   if (p.stock !== undefined && p.stock !== null && p.stock <= 0) {
-                    alert("This product is out of stock!");
+                    showModal("This product is out of stock!", "Out of Stock", "warning");
                     return;
                   }
 
@@ -695,7 +992,7 @@ export default function Products() {
                   
                   if (existing) {
                     if (existing.quantity >= maxQuantity) {
-                      alert(`Maximum ${maxQuantity} items allowed for this product.`);
+                      showModal(`Maximum ${maxQuantity} items allowed for this product.`, "Quantity Limit", "warning");
                       return;
                     }
                     existing.quantity++;
@@ -709,7 +1006,7 @@ export default function Products() {
                   }
 
                   localStorage.setItem(cartKey, JSON.stringify(cart));
-                  alert("Added to cart!");
+                  showModal("Added to cart!", "Success", "success");
                 }}
                 disabled={p.stock !== undefined && p.stock !== null && p.stock <= 0}
                 onMouseEnter={(e) => {

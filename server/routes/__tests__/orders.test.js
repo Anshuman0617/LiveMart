@@ -406,6 +406,7 @@ describe('Orders Routes', () => {
         id: 1,
         status: 'confirmed',
         save: vi.fn().mockResolvedValue(true),
+        reload: vi.fn().mockResolvedValue(true),
         items: [
           {
             id: 1,
@@ -437,6 +438,7 @@ describe('Orders Routes', () => {
         id: 1,
         status: 'delivered',
         save: vi.fn().mockResolvedValue(true),
+        reload: vi.fn().mockResolvedValue(true),
         items: [
           {
             id: 1,

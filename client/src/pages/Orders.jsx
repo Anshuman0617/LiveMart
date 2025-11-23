@@ -2,13 +2,19 @@
 import React, { useState, useEffect } from 'react';
 import { api, authHeader } from '../api';
 import { useNavigate } from 'react-router-dom';
+import { useModal } from '../hooks/useModal';
 
 export default function Orders() {
+  const { showModal, ModalComponent } = useModal();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [userRole, setUserRole] = useState(null);
+  const [deliveryPersons, setDeliveryPersons] = useState([]);
+  const [selectedDeliveryPerson, setSelectedDeliveryPerson] = useState({});
+  const [currentOrdersExpanded, setCurrentOrdersExpanded] = useState(true);
+  const [previousOrdersExpanded, setPreviousOrdersExpanded] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -34,6 +40,18 @@ export default function Orders() {
     };
 
     fetchOrders();
+    
+    // Load delivery persons if user is a seller
+    const loadDeliveryPersons = async () => {
+      try {
+        const res = await api.get('/orders/delivery/persons', { headers: authHeader() });
+        setDeliveryPersons(res.data || []);
+      } catch (err) {
+        console.error('Failed to load delivery persons:', err);
+      }
+    };
+    
+    loadDeliveryPersons();
   }, [navigate]);
 
   const updateOrderStatus = async (orderId, status) => {
@@ -51,10 +69,73 @@ export default function Orders() {
         )
       );
       
-      alert(`Order status updated to ${status}`);
+      // Dispatch custom event to notify other pages (Cart, WholesaleCart) to refresh orders
+      window.dispatchEvent(new CustomEvent('orderStatusUpdated', {
+        detail: { orderId, status: res.data.order.status }
+      }));
+      
+      showModal(`Order status updated to ${status}`, "Success", "success");
     } catch (err) {
       console.error('Failed to update order status:', err);
-      alert(err.response?.data?.error || 'Failed to update order status');
+      showModal(err.response?.data?.error || 'Failed to update order status', "Error", "error");
+    }
+  };
+
+  const markOutForDelivery = async (orderId) => {
+    try {
+      const deliveryPersonId = selectedDeliveryPerson[orderId] || null;
+      const res = await api.put(
+        `/orders/${orderId}/out-for-delivery`,
+        { deliveryPersonId },
+        { headers: authHeader() }
+      );
+      
+      // Update local orders state
+      setOrders(prevOrders =>
+        prevOrders.map(order =>
+          order.id === orderId ? { 
+            ...order, 
+            trackingStatus: res.data.order.trackingStatus,
+            outForDelivery: res.data.order.outForDelivery,
+            deliveryType: res.data.order.deliveryType,
+            deliveryPersonId: res.data.order.deliveryPersonId
+          } : order
+        )
+      );
+      
+      // Dispatch custom event to notify other pages (Cart, WholesaleCart) to refresh orders
+      window.dispatchEvent(new CustomEvent('orderStatusUpdated', {
+        detail: { orderId, trackingStatus: res.data.order.trackingStatus }
+      }));
+      
+      showModal('Order marked as out for delivery', "Success", "success");
+    } catch (err) {
+      console.error('Failed to mark order as out for delivery:', err);
+      showModal(err.response?.data?.error || 'Failed to mark order as out for delivery', "Error", "error");
+    }
+  };
+
+  const markOrderReceived = async (orderId) => {
+    try {
+      const res = await api.put(
+        `/orders/${orderId}/mark-received`,
+        {},
+        { headers: authHeader() }
+      );
+      
+      // Reload all orders to ensure proper filtering into current/previous sections
+      const ordersRes = await api.get('/orders/seller', { headers: authHeader() });
+      setOrders(ordersRes.data || []);
+      
+      // Dispatch custom event to notify other pages (Cart, WholesaleCart) to refresh orders
+      window.dispatchEvent(new CustomEvent('orderStatusUpdated', {
+        detail: { orderId, trackingStatus: res.data.order.trackingStatus }
+      }));
+      
+      showModal('Order marked as received', "Success", "success");
+    } catch (err) {
+      console.error('Failed to mark order as received:', err);
+      showModal(err.response?.data?.error || 'Failed to mark order as received', "Error", "error");
     }
   };
 
@@ -161,12 +242,36 @@ export default function Orders() {
       {/* Current Orders (Undelivered) */}
       {filteredCurrentOrders.length > 0 && (
         <div style={{ marginTop: '30px' }}>
-          <h2 style={{ marginBottom: '20px', fontSize: '24px', fontWeight: 600 }}>
-            Current Orders (Undelivered)
-            {searchQuery && ` (${filteredCurrentOrders.length} found)`}
-          </h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {filteredCurrentOrders.map((order) => (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', cursor: 'pointer' }} onClick={() => setCurrentOrdersExpanded(!currentOrdersExpanded)}>
+            <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 600 }}>
+              Current Orders (Undelivered)
+              {searchQuery && ` (${filteredCurrentOrders.length} found)`}
+            </h2>
+            <button
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer',
+                color: '#6b7280',
+                padding: '0',
+                width: '30px',
+                height: '30px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentOrdersExpanded(!currentOrdersExpanded);
+              }}
+            >
+              {currentOrdersExpanded ? '−' : '+'}
+            </button>
+          </div>
+          {currentOrdersExpanded && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {filteredCurrentOrders.map((order) => (
               <div
                 key={order.id}
                 style={{
@@ -212,6 +317,72 @@ export default function Orders() {
                         {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                       </span>
                     </p>
+                    {/* Tracking Status - Show delivery status for regular orders, pickup status for store pickup */}
+                    {order.scheduledPickupTime ? (
+                      <div style={{ 
+                        margin: '8px 0', 
+                        padding: '8px 12px', 
+                        backgroundColor: (order.trackingStatus === 'delivered') ? '#d1fae5' : '#f3f4f6',
+                        borderRadius: '6px',
+                        border: `1px solid ${(order.trackingStatus === 'delivered') ? '#10b981' : '#d1d5db'}`,
+                        display: 'inline-block'
+                      }}>
+                        <p style={{ margin: 0, fontSize: '14px', color: (order.trackingStatus === 'delivered') ? '#065f46' : '#374151', fontWeight: 600 }}>
+                          {(order.trackingStatus === 'delivered') ? '✓ Picked Up' : '📦 Pending Pickup'}
+                        </p>
+                        {order.deliveredAt && (
+                          <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
+                            Picked up: {formatDate(order.deliveredAt)}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ 
+                        margin: '8px 0', 
+                        padding: '8px 12px', 
+                        backgroundColor: (order.trackingStatus === 'out_for_delivery') ? '#fef3c7' : (order.trackingStatus === 'delivered') ? '#d1fae5' : '#f3f4f6',
+                        borderRadius: '6px',
+                        border: `1px solid ${(order.trackingStatus === 'out_for_delivery') ? '#fbbf24' : (order.trackingStatus === 'delivered') ? '#10b981' : '#d1d5db'}`,
+                        display: 'inline-block'
+                      }}>
+                        <p style={{ margin: 0, fontSize: '14px', color: (order.trackingStatus === 'out_for_delivery') ? '#92400e' : (order.trackingStatus === 'delivered') ? '#065f46' : '#374151', fontWeight: 600 }}>
+                          {(order.trackingStatus === 'out_for_delivery') ? '🚚 Out for Delivery' : (order.trackingStatus === 'delivered') ? '✓ Delivered' : '📦 Pending Delivery'}
+                        </p>
+                        {order.outForDelivery && (
+                          <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
+                            Out: {formatDate(order.outForDelivery)}
+                          </p>
+                        )}
+                        {order.deliveredAt && (
+                          <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
+                            Delivered: {formatDate(order.deliveredAt)}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {/* Delivery Person Information */}
+                    {order.deliveryPerson && !order.scheduledPickupTime && (
+                      <div style={{ 
+                        margin: '8px 0', 
+                        padding: '8px 12px', 
+                        backgroundColor: '#eff6ff',
+                        borderRadius: '6px',
+                        border: '1px solid #bfdbfe',
+                        display: 'inline-block'
+                      }}>
+                        <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#1e40af' }}>
+                          🚚 Delivery Person:
+                        </p>
+                        <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#1e3a8a' }}>
+                          {order.deliveryPerson.name || order.deliveryPerson.email}
+                        </p>
+                        {order.deliveryPerson.phone && (
+                          <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#3b82f6' }}>
+                            📞 {order.deliveryPerson.phone}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <p style={{ margin: 0, fontSize: '20px', fontWeight: 600 }}>
@@ -299,8 +470,59 @@ export default function Orders() {
                   </div>
                 </div>
 
+                {/* Tracking Actions - Only show for non-store-pickup orders */}
+                {order.status === 'confirmed' && (order.trackingStatus === 'pending' || !order.trackingStatus) && userRole && !order.scheduledPickupTime && (
+                  <div style={{ marginBottom: '16px', padding: '16px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                    <p style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 600 }}>Delivery Tracking:</p>
+                    {deliveryPersons.length > 0 && (
+                      <div style={{ marginBottom: '12px' }}>
+                        <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px', color: '#6b7280' }}>
+                          Select Delivery Person (Optional):
+                        </label>
+                        <select
+                          value={selectedDeliveryPerson[order.id] || ''}
+                          onChange={(e) => setSelectedDeliveryPerson({ ...selectedDeliveryPerson, [order.id]: e.target.value || null })}
+                          style={{
+                            width: '100%',
+                            maxWidth: '300px',
+                            padding: '8px',
+                            fontSize: '14px',
+                            border: '1px solid #ddd',
+                            borderRadius: '6px'
+                          }}
+                        >
+                          <option value="">None (Self Delivery)</option>
+                          {deliveryPersons.map((dp) => (
+                            <option key={dp.id} value={dp.id}>
+                              {dp.name} ({dp.phone || dp.email})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => markOutForDelivery(order.id)}
+                      style={{
+                        padding: '10px 20px',
+                        backgroundColor: '#2563eb',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        fontWeight: 600,
+                        transition: 'background 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = '#1d4ed8'}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = '#2563eb'}
+                    >
+                      Mark Out for Delivery
+                    </button>
+                  </div>
+                )}
+
                 {/* Action Buttons */}
-                <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+                <div style={{ display: 'flex', gap: '12px', marginTop: '16px', flexWrap: 'wrap' }}>
                   {order.status !== 'delivered' && (
                     <button
                       onClick={() => updateOrderStatus(order.id, 'delivered')}
@@ -319,6 +541,27 @@ export default function Orders() {
                       onMouseLeave={(e) => e.target.style.backgroundColor = '#059669'}
                     >
                       Mark as Delivered
+                    </button>
+                  )}
+                  {/* Mark Received button for retailers receiving from wholesalers */}
+                  {userRole === 'retailer' && order.trackingStatus === 'out_for_delivery' && order.deliveryType === 'wholesaler_to_retailer' && !order.scheduledPickupTime && (
+                    <button
+                      onClick={() => markOrderReceived(order.id)}
+                      style={{
+                        padding: '10px 20px',
+                        backgroundColor: '#10b981',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        fontWeight: 600,
+                        transition: 'background 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = '#059669'}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = '#10b981'}
+                    >
+                      Mark as Received
                     </button>
                   )}
                   {order.status === 'delivered' && (
@@ -343,19 +586,44 @@ export default function Orders() {
                   )}
                 </div>
               </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
       {/* Previous Orders (Delivered) */}
       {filteredPreviousOrders.length > 0 && (
         <div style={{ marginTop: '40px' }}>
-          <h2 style={{ marginBottom: '20px', fontSize: '24px', fontWeight: 600 }}>
-            Previous Orders (Delivered)
-            {searchQuery && ` (${filteredPreviousOrders.length} found)`}
-          </h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', cursor: 'pointer' }} onClick={() => setPreviousOrdersExpanded(!previousOrdersExpanded)}>
+            <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 600 }}>
+              Previous Orders (Delivered)
+              {searchQuery && ` (${filteredPreviousOrders.length} found)`}
+            </h2>
+            <button
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer',
+                color: '#6b7280',
+                padding: '0',
+                width: '30px',
+                height: '30px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setPreviousOrdersExpanded(!previousOrdersExpanded);
+              }}
+            >
+              {previousOrdersExpanded ? '−' : '+'}
+            </button>
+          </div>
+          {previousOrdersExpanded && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {filteredPreviousOrders.map((order) => (
               <div
                 key={order.id}
@@ -392,6 +660,72 @@ export default function Orders() {
                         <p style={{ margin: 0, fontSize: '14px', color: '#1e40af', fontWeight: 600 }}>
                           📅 Store Pickup: {formatDateOnly(order.scheduledPickupTime)}
                         </p>
+                      </div>
+                    )}
+                    {/* Tracking Status - Show delivery status for regular orders, pickup status for store pickup */}
+                    {order.scheduledPickupTime ? (
+                      <div style={{ 
+                        margin: '8px 0', 
+                        padding: '8px 12px', 
+                        backgroundColor: (order.trackingStatus === 'delivered') ? '#d1fae5' : '#f3f4f6',
+                        borderRadius: '6px',
+                        border: `1px solid ${(order.trackingStatus === 'delivered') ? '#10b981' : '#d1d5db'}`,
+                        display: 'inline-block'
+                      }}>
+                        <p style={{ margin: 0, fontSize: '14px', color: (order.trackingStatus === 'delivered') ? '#065f46' : '#374151', fontWeight: 600 }}>
+                          {(order.trackingStatus === 'delivered') ? '✓ Picked Up' : '📦 Pending Pickup'}
+                        </p>
+                        {order.deliveredAt && (
+                          <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
+                            Picked up: {formatDate(order.deliveredAt)}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ 
+                        margin: '8px 0', 
+                        padding: '8px 12px', 
+                        backgroundColor: (order.trackingStatus === 'out_for_delivery') ? '#fef3c7' : (order.trackingStatus === 'delivered') ? '#d1fae5' : '#f3f4f6',
+                        borderRadius: '6px',
+                        border: `1px solid ${(order.trackingStatus === 'out_for_delivery') ? '#fbbf24' : (order.trackingStatus === 'delivered') ? '#10b981' : '#d1d5db'}`,
+                        display: 'inline-block'
+                      }}>
+                        <p style={{ margin: 0, fontSize: '14px', color: (order.trackingStatus === 'out_for_delivery') ? '#92400e' : (order.trackingStatus === 'delivered') ? '#065f46' : '#374151', fontWeight: 600 }}>
+                          {(order.trackingStatus === 'out_for_delivery') ? '🚚 Out for Delivery' : (order.trackingStatus === 'delivered') ? '✓ Delivered' : '📦 Pending Delivery'}
+                        </p>
+                        {order.outForDelivery && (
+                          <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
+                            Out: {formatDate(order.outForDelivery)}
+                          </p>
+                        )}
+                        {order.deliveredAt && (
+                          <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
+                            Delivered: {formatDate(order.deliveredAt)}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {/* Delivery Person Information */}
+                    {order.deliveryPerson && !order.scheduledPickupTime && (
+                      <div style={{ 
+                        margin: '8px 0', 
+                        padding: '8px 12px', 
+                        backgroundColor: '#eff6ff',
+                        borderRadius: '6px',
+                        border: '1px solid #bfdbfe',
+                        display: 'inline-block'
+                      }}>
+                        <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#1e40af' }}>
+                          🚚 Delivery Person:
+                        </p>
+                        <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#1e3a8a' }}>
+                          {order.deliveryPerson.name || order.deliveryPerson.email}
+                        </p>
+                        {order.deliveryPerson.phone && (
+                          <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#3b82f6' }}>
+                            📞 {order.deliveryPerson.phone}
+                          </p>
+                        )}
                       </div>
                     )}
                     <p style={{ margin: '4px 0', fontSize: '14px', color: '#059669', fontWeight: 600 }}>
@@ -507,7 +841,8 @@ export default function Orders() {
                 </div>
               </div>
             ))}
-          </div>
+            </div>
+          )}
         </div>
       )}
 

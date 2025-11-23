@@ -64,12 +64,28 @@ router.post('/create-payment', authMiddleware, async (req, res) => {
 
     // Get success and failure URLs from environment or use defaults
     // Default to port 3000 (Vite dev server) or use environment variable
+    // IMPORTANT: For local development, PayU cannot access localhost URLs
+    // Use ngrok or a public URL for testing, or set PAYU_SUCCESS_URL and PAYU_FAILURE_URL
     const defaultPort = process.env.CLIENT_PORT || '3000';
     const defaultBaseUrl = process.env.CLIENT_BASE_URL || `http://localhost:${defaultPort}`;
-    let successUrl = process.env.PAYU_SUCCESS_URL || `${defaultBaseUrl}/payment-success`;
-    let failureUrl = process.env.PAYU_FAILURE_URL || `${defaultBaseUrl}/payment-failure`;
+    
+    let successUrl = process.env.PAYU_SUCCESS_URL;
+    let failureUrl = process.env.PAYU_FAILURE_URL;
+    
+    // If not set in env, construct from base URL
+    if (!successUrl) {
+      // Remove trailing slash from base URL if present, then add path
+      const base = defaultBaseUrl.replace(/\/+$/, '');
+      successUrl = `${base}/payment-success`;
+    }
+    
+    if (!failureUrl) {
+      // Remove trailing slash from base URL if present, then add path
+      const base = defaultBaseUrl.replace(/\/+$/, '');
+      failureUrl = `${base}/payment-failure`;
+    }
 
-    // Ensure URLs are properly formatted (no trailing slashes except after domain)
+    // Ensure URLs are properly formatted (no double slashes in path)
     successUrl = successUrl.replace(/([^:]\/)\/+/g, "$1");
     failureUrl = failureUrl.replace(/([^:]\/)\/+/g, "$1");
 
@@ -392,20 +408,36 @@ router.post('/verify-payment', authMiddleware, async (req, res) => {
             status: 'pending', // Payment to seller is pending until manually settled
           }, { transaction: t });
           
-          // Reduce stock
+          // Reduce stock and increment soldCount
           // For wholesaler products: qty is in multiples, stock is in multiples
           // For retailer products: qty is in units, stock is in units
           const currentStock = parseInt(product.stock) || 0;
           const newStock = Math.max(0, currentStock - qty);
-          await product.update({ stock: newStock }, { transaction: t });
           
-          console.log('Stock reduced:', {
+          // Increment soldCount
+          // For wholesaler products: qty is in multiples, so soldCount should track units (qty * multiples)
+          // For retailer products: qty is in units, so soldCount should track units (qty)
+          const currentSoldCount = parseInt(product.soldCount) || 0;
+          const unitsSold = product.ownerType === 'wholesaler' 
+            ? qty * (product.multiples || 1)  // Convert multiples to units
+            : qty;  // Already in units for retailers
+          const newSoldCount = currentSoldCount + unitsSold;
+          
+          await product.update({ 
+            stock: newStock,
+            soldCount: newSoldCount
+          }, { transaction: t });
+          
+          console.log('Stock reduced and soldCount updated:', {
             productId: product.id,
             productTitle: product.title,
             ownerType: product.ownerType,
             currentStock,
             qty,
             newStock,
+            currentSoldCount,
+            unitsSold,
+            newSoldCount,
             multiples: product.multiples
           });
 

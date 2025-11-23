@@ -3,9 +3,11 @@ import React, { useState } from "react";
 import { api } from "../api";
 import { useNavigate } from "react-router-dom";
 import GoogleLoginButton from "../components/GoogleLoginButton";
+import { useModal } from "../hooks/useModal";
 
 export default function Login() {
   const nav = useNavigate();
+  const { showModal, ModalComponent } = useModal();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -36,17 +38,19 @@ export default function Login() {
         window.location.href = '/retailer';
       } else if (res.data.user.role == 'wholesaler') {
         window.location.href = '/wholesaler';
+      } else if (res.data.user.role == 'delivery') {
+        window.location.href = '/delivery';
       } else {
         nav("/");
       }
     } catch {
-      alert("Invalid email or password");
+      showModal("Invalid email or password", "Login Failed", "error");
     }
   }
 
   async function handleSendOTP() {
     if (!email) {
-      alert("Please enter your email first");
+      showModal("Please enter your email first", "Missing Email", "warning");
       return;
     }
 
@@ -55,7 +59,7 @@ export default function Login() {
     try {
       await api.post("/otp/send", { email });
       setOtpSent(true);
-      alert("OTP sent to your email! Please check your inbox.");
+      showModal("OTP sent to your email! Please check your inbox.", "OTP Sent", "success");
     } catch (err) {
       setOtpError(err.response?.data?.error || "Failed to send OTP. Please try again.");
     } finally {
@@ -74,7 +78,7 @@ export default function Login() {
     try {
       await api.post("/otp/verify", { email, otp });
       setOtpVerified(true);
-      alert("Email verified successfully! You can now register.");
+      showModal("Email verified successfully! You can now register.", "Email Verified", "success");
     } catch (err) {
       setOtpError(err.response?.data?.error || "Invalid OTP. Please try again.");
     } finally {
@@ -84,7 +88,7 @@ export default function Login() {
 
   async function handleRegister() {
     if (!otpVerified) {
-      alert("Please verify your email with OTP first");
+      showModal("Please verify your email with OTP first", "Email Not Verified", "warning");
       return;
     }
 
@@ -108,12 +112,14 @@ export default function Login() {
         window.location.href = '/retailer';
       } else if (res.data.user.role == 'wholesaler') {
         window.location.href = '/wholesaler';
+      } else if (res.data.user.role == 'delivery') {
+        window.location.href = '/delivery';
       } else {
         nav("/");
       }
     } catch (err) {
       const errorMsg = err.response?.data?.error || "Registration failed";
-      alert(errorMsg);
+      showModal(errorMsg, "Registration Failed", "error");
     }
   }
 
@@ -142,6 +148,8 @@ export default function Login() {
 
   return (
     <div className="login-page-container">
+      <ModalComponent />
+      <ModalComponent />
       <div className="login-card">
         <div className="login-header">
           <h2>Welcome to LiveMart</h2>
@@ -186,6 +194,7 @@ export default function Login() {
                   <option value="customer">User</option>
                   <option value="retailer">Retailer</option>
                   <option value="wholesaler">Wholesaler</option>
+                  <option value="delivery">Delivery Person</option>
                 </select>
               </div>
 

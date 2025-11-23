@@ -83,4 +83,59 @@ router.get('/:productId', async (req, res) => {
   }
 });
 
+// Respond to a review (retailers only)
+router.put('/:reviewId/respond', authMiddleware, async (req, res) => {
+  try {
+    const { response } = req.body;
+    
+    if (!response || !response.trim()) {
+      return res.status(400).json({ error: 'Response is required' });
+    }
+    
+    // Only retailers can respond to reviews
+    if (req.user.role !== 'retailer') {
+      return res.status(403).json({ error: 'Only retailers can respond to reviews' });
+    }
+    
+    const review = await Review.findByPk(req.params.reviewId, {
+      include: [
+        {
+          model: Product,
+          as: 'product',
+          attributes: ['id', 'ownerId', 'ownerType']
+        }
+      ]
+    });
+    
+    if (!review) {
+      return res.status(404).json({ error: 'Review not found' });
+    }
+    
+    // Verify that this review is for a product owned by this retailer
+    if (review.product.ownerId !== req.user.id || review.product.ownerType !== 'retailer') {
+      return res.status(403).json({ error: 'You can only respond to reviews for your own products' });
+    }
+    
+    review.retailerResponse = response.trim();
+    review.retailerResponseAt = new Date();
+    await review.save();
+    
+    // Reload with user association
+    await review.reload({
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'name', 'picture']
+        }
+      ]
+    });
+    
+    res.json(review);
+  } catch (err) {
+    console.error('Respond to review error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 export default router;

@@ -2,8 +2,10 @@
 import React, { useState, useEffect } from "react";
 import { api, authHeader } from "../api";
 import { useNavigate, Link } from "react-router-dom";
+import { useModal } from "../hooks/useModal";
 
 export default function WholesaleCart() {
+  const { showModal, ModalComponent } = useModal();
   const [cart, setCart] = useState([]);
   const [cartItems, setCartItems] = useState([]); // Cart items with full product details
   const [userAddress, setUserAddress] = useState("");
@@ -15,6 +17,8 @@ export default function WholesaleCart() {
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [orders, setOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
+  const [currentOrdersExpanded, setCurrentOrdersExpanded] = useState(true);
+  const [previousOrdersExpanded, setPreviousOrdersExpanded] = useState(true);
   const navigate = useNavigate();
 
   // Load cart items with full product details
@@ -141,8 +145,14 @@ export default function WholesaleCart() {
       loadUserDetails();
     };
 
+    // Reload cart when user logs in (to restore their saved cart)
+    const handleUserLoginForCart = () => {
+      loadCart();
+    };
+    
     window.addEventListener('userLogin', handleUserUpdate);
     window.addEventListener('userLogout', handleUserUpdate);
+    window.addEventListener('userLogin', handleUserLoginForCart);
 
     // Load user orders
     const loadOrders = async () => {
@@ -161,9 +171,17 @@ export default function WholesaleCart() {
     };
     loadOrders();
 
+    // Listen for order status updates from seller dashboards
+    const handleOrderStatusUpdate = () => {
+      loadOrders();
+    };
+    window.addEventListener('orderStatusUpdated', handleOrderStatusUpdate);
+
     return () => {
       window.removeEventListener('userLogin', handleUserUpdate);
       window.removeEventListener('userLogout', handleUserUpdate);
+      window.removeEventListener('userLogin', handleUserLoginForCart);
+      window.removeEventListener('orderStatusUpdated', handleOrderStatusUpdate);
     };
   }, [loadUserDetails]);
 
@@ -261,7 +279,7 @@ export default function WholesaleCart() {
       const newQuantity = item.quantity + multiples;
       
       if (newQuantity > maxUnits) {
-        alert(`Only ${maxMultiples} multiple${maxMultiples !== 1 ? 's' : ''} (${maxUnits} units) available in stock.`);
+        showModal(`Only ${maxMultiples} multiple${maxMultiples !== 1 ? 's' : ''} (${maxUnits} units) available in stock.`, "Stock Limit", "warning");
         return;
       }
       
@@ -288,7 +306,7 @@ export default function WholesaleCart() {
           updateCart(c.filter((i) => i.productId !== id));
           return;
         }
-        alert(`Cannot decrement below ${multiples} units (1 multiple). This product must be ordered in multiples of ${multiples}.`);
+        showModal(`Cannot decrement below ${multiples} units (1 multiple). This product must be ordered in multiples of ${multiples}.`, "Quantity Limit", "warning");
         return;
       }
       
@@ -321,31 +339,31 @@ export default function WholesaleCart() {
 
   const handleCheckout = async () => {
     if (cart.length === 0) {
-      alert("Your wholesale cart is empty!");
+      showModal("Your wholesale cart is empty!", "Empty Cart", "warning");
       return;
     }
 
     // Check if user is logged in
     const token = localStorage.getItem("token");
     if (!token) {
-      alert("Please log in to proceed with checkout");
+      showModal("Please log in to proceed with checkout", "Login Required", "warning");
       navigate("/login");
       return;
     }
 
     // Validate address and phone from profile
     if (!userAddress.trim()) {
-      alert("Please set your address in profile settings before checkout");
+      showModal("Please set your address in profile settings before checkout", "Address Required", "warning");
       return;
     }
 
     if (!userPhone.trim()) {
-      alert("Please set your phone number in profile settings before checkout");
+      showModal("Please set your phone number in profile settings before checkout", "Phone Required", "warning");
       return;
     }
 
     if (!firstName.trim() || !email.trim()) {
-      alert("Please fill in all required details (Name, Email)");
+      showModal("Please fill in all required details (Name, Email)", "Details Required", "warning");
       return;
     }
 
@@ -412,21 +430,29 @@ export default function WholesaleCart() {
       }, 1000);
     } catch (err) {
       console.error("Checkout error:", err);
-      alert(
+      showModal(
         err.response?.data?.error ||
-          "Failed to initiate payment. Please try again."
+          "Failed to initiate payment. Please try again.",
+        "Payment Error",
+        "error"
       );
       setLoading(false);
     }
   };
 
   // Separate orders into current (undelivered) and previous (delivered)
-  const currentOrders = orders.filter(order => 
-    order.status !== 'delivered' && order.status !== 'cancelled' && order.status !== 'fulfilled'
-  );
-  const previousOrders = orders.filter(order => 
-    order.status === 'delivered' || order.status === 'fulfilled'
-  );
+  // Include orders with trackingStatus === 'delivered' in previous orders
+  const currentOrders = orders.filter(order => {
+    const isDelivered = order.status === 'delivered' || order.status === 'fulfilled';
+    const isTrackingDelivered = order.trackingStatus === 'delivered';
+    const isCancelled = order.status === 'cancelled';
+    return !isDelivered && !isTrackingDelivered && !isCancelled;
+  });
+  const previousOrders = orders.filter(order => {
+    const isDelivered = order.status === 'delivered' || order.status === 'fulfilled';
+    const isTrackingDelivered = order.trackingStatus === 'delivered';
+    return isDelivered || isTrackingDelivered;
+  });
 
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -440,8 +466,38 @@ export default function WholesaleCart() {
     });
   };
 
+  const formatDateOnly = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric'
+    });
+  };
+
+  const markOrderReceived = async (orderId) => {
+    try {
+      const res = await api.put(
+        `/orders/${orderId}/mark-received`,
+        {},
+        { headers: authHeader() }
+      );
+      
+      // Reload orders to get updated tracking status and move order to previous section
+      const ordersRes = await api.get('/orders', { headers: authHeader() });
+      setOrders(ordersRes.data || []);
+      
+      showModal('Order receipt confirmed', 'Success', 'success');
+    } catch (err) {
+      console.error('Failed to mark order as received:', err);
+      showModal(err.response?.data?.error || 'Failed to confirm receipt', 'Error', 'error');
+    }
+  };
+
   return (
     <div className="App">
+      <ModalComponent />
       <h2>Wholesale Cart</h2>
 
       {loadingProducts && <p>Loading cart items...</p>}
@@ -765,7 +821,7 @@ export default function WholesaleCart() {
             </div>
 
             <div style={{ marginTop: 15 }}>
-              <p style={{ marginBottom: 5 }}>Name: *</p>
+              <p style={{ marginBottom: 5 }}>Name (for order processing): *</p>
               <input
                 type="text"
                 value={firstName}
@@ -777,7 +833,7 @@ export default function WholesaleCart() {
             </div>
 
             <div>
-              <p style={{ marginBottom: 5 }}>Email: *</p>
+              <p style={{ marginBottom: 5 }}>Email (for payment processing): *</p>
               <input
                 type="email"
                 value={email}
@@ -835,8 +891,32 @@ export default function WholesaleCart() {
           {/* Current Orders (Undelivered) */}
           {currentOrders.length > 0 && (
             <div style={{ marginTop: '40px' }}>
-              <h2 style={{ marginBottom: '20px' }}>Orders</h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', cursor: 'pointer' }} onClick={() => setCurrentOrdersExpanded(!currentOrdersExpanded)}>
+                <h2 style={{ margin: 0 }}>Orders ({currentOrders.length})</h2>
+                <button
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '24px',
+                    cursor: 'pointer',
+                    color: '#6b7280',
+                    padding: '0',
+                    width: '30px',
+                    height: '30px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCurrentOrdersExpanded(!currentOrdersExpanded);
+                  }}
+                >
+                  {currentOrdersExpanded ? '−' : '+'}
+                </button>
+              </div>
+              {currentOrdersExpanded && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {currentOrders.map((order) => (
                   <div
                     key={order.id}
@@ -863,6 +943,49 @@ export default function WholesaleCart() {
                             {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                           </span>
                         </p>
+                        {/* Tracking Status - Show delivery status for regular orders, pickup status for store pickup */}
+                        {order.scheduledPickupTime ? (
+                          <div style={{ 
+                            margin: '8px 0', 
+                            padding: '8px 12px', 
+                            backgroundColor: (order.trackingStatus === 'delivered') ? '#d1fae5' : '#f3f4f6',
+                            borderRadius: '6px',
+                            border: `1px solid ${(order.trackingStatus === 'delivered') ? '#10b981' : '#d1d5db'}`,
+                            display: 'inline-block'
+                          }}>
+                            <p style={{ margin: 0, fontSize: '14px', color: (order.trackingStatus === 'delivered') ? '#065f46' : '#374151', fontWeight: 600 }}>
+                              {(order.trackingStatus === 'delivered') ? '✓ Picked Up' : '📦 Pending Pickup'}
+                            </p>
+                            {order.deliveredAt && (
+                              <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
+                                Picked up: {formatDate(order.deliveredAt)}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ 
+                            margin: '8px 0', 
+                            padding: '8px 12px', 
+                            backgroundColor: (order.trackingStatus === 'out_for_delivery') ? '#fef3c7' : (order.trackingStatus === 'delivered') ? '#d1fae5' : '#f3f4f6',
+                            borderRadius: '6px',
+                            border: `1px solid ${(order.trackingStatus === 'out_for_delivery') ? '#fbbf24' : (order.trackingStatus === 'delivered') ? '#10b981' : '#d1d5db'}`,
+                            display: 'inline-block'
+                          }}>
+                            <p style={{ margin: 0, fontSize: '14px', color: (order.trackingStatus === 'out_for_delivery') ? '#92400e' : (order.trackingStatus === 'delivered') ? '#065f46' : '#374151', fontWeight: 600 }}>
+                              {(order.trackingStatus === 'out_for_delivery') ? '🚚 Out for Delivery' : (order.trackingStatus === 'delivered') ? '✓ Delivered' : '📦 Pending Delivery'}
+                            </p>
+                            {order.outForDelivery && (
+                              <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
+                                Out: {formatDate(order.outForDelivery)}
+                              </p>
+                            )}
+                            {order.deliveredAt && (
+                              <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
+                                Delivered: {formatDate(order.deliveredAt)}
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <p style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>
@@ -912,17 +1035,81 @@ export default function WholesaleCart() {
                         ))}
                       </div>
                     </div>
+
+                    {/* Mark Received button for retailers receiving from wholesalers - Only for delivered orders */}
+                    {order.trackingStatus === 'delivered' && order.deliveryType === 'wholesaler_to_retailer' && !order.scheduledPickupTime && (
+                      <div style={{ marginTop: '12px' }}>
+                        <div style={{ 
+                          padding: '12px', 
+                          backgroundColor: '#f0fdf4', 
+                          borderRadius: '6px', 
+                          border: '1px solid #86efac',
+                          marginBottom: '12px'
+                        }}>
+                          <p style={{ margin: '0 0 4px 0', fontSize: '13px', fontWeight: 600, color: '#166534' }}>
+                            ✓ Order Delivered
+                          </p>
+                          <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#374151' }}>
+                            Your order has been delivered. Please confirm receipt.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => markOrderReceived(order.id)}
+                          style={{
+                            padding: '10px 20px',
+                            backgroundColor: '#10b981',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: 600,
+                            transition: 'background 0.2s',
+                            width: '100%'
+                          }}
+                          onMouseEnter={(e) => e.target.style.backgroundColor = '#059669'}
+                          onMouseLeave={(e) => e.target.style.backgroundColor = '#10b981'}
+                        >
+                          Confirm Receipt
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
-              </div>
+                </div>
+              )}
             </div>
           )}
 
           {/* Previous Orders (Delivered) */}
           {previousOrders.length > 0 && (
             <div style={{ marginTop: '40px' }}>
-              <h2 style={{ marginBottom: '20px' }}>Previous Orders</h2>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', cursor: 'pointer' }} onClick={() => setPreviousOrdersExpanded(!previousOrdersExpanded)}>
+                <h2 style={{ margin: 0 }}>Previous Orders ({previousOrders.length})</h2>
+                <button
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '24px',
+                    cursor: 'pointer',
+                    color: '#6b7280',
+                    padding: '0',
+                    width: '30px',
+                    height: '30px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPreviousOrdersExpanded(!previousOrdersExpanded);
+                  }}
+                >
+                  {previousOrdersExpanded ? '−' : '+'}
+                </button>
+              </div>
+              {previousOrdersExpanded && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {previousOrders.map((order) => (
                   <div
                     key={order.id}
@@ -941,9 +1128,86 @@ export default function WholesaleCart() {
                         <p style={{ margin: '4px 0', fontSize: '14px', color: '#6b7280' }}>
                           Ordered on: {formatDate(order.createdAt)}
                         </p>
-                        <p style={{ margin: '4px 0', fontSize: '14px', color: '#059669', fontWeight: 600 }}>
-                          ✓ Delivered
-                        </p>
+                        {order.scheduledPickupTime && (
+                          <div style={{ 
+                            margin: '8px 0', 
+                            padding: '8px 12px', 
+                            backgroundColor: '#dbeafe', 
+                            borderRadius: '6px',
+                            border: '1px solid #93c5fd',
+                            display: 'inline-block'
+                          }}>
+                            <p style={{ margin: 0, fontSize: '14px', color: '#1e40af', fontWeight: 600 }}>
+                              📅 Store Pickup: {formatDateOnly(order.scheduledPickupTime)}
+                            </p>
+                          </div>
+                        )}
+                        {/* Tracking Status - Show delivery status for regular orders, pickup status for store pickup */}
+                        {order.scheduledPickupTime ? (
+                          <div style={{ 
+                            margin: '8px 0', 
+                            padding: '8px 12px', 
+                            backgroundColor: (order.trackingStatus === 'delivered') ? '#d1fae5' : '#f3f4f6',
+                            borderRadius: '6px',
+                            border: `1px solid ${(order.trackingStatus === 'delivered') ? '#10b981' : '#d1d5db'}`,
+                            display: 'inline-block'
+                          }}>
+                            <p style={{ margin: 0, fontSize: '14px', color: (order.trackingStatus === 'delivered') ? '#065f46' : '#374151', fontWeight: 600 }}>
+                              {(order.trackingStatus === 'delivered') ? '✓ Picked Up' : '📦 Pending Pickup'}
+                            </p>
+                            {order.deliveredAt && (
+                              <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
+                                Picked up: {formatDate(order.deliveredAt)}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ 
+                            margin: '8px 0', 
+                            padding: '8px 12px', 
+                            backgroundColor: (order.trackingStatus === 'out_for_delivery') ? '#fef3c7' : (order.trackingStatus === 'delivered') ? '#d1fae5' : '#f3f4f6',
+                            borderRadius: '6px',
+                            border: `1px solid ${(order.trackingStatus === 'out_for_delivery') ? '#fbbf24' : (order.trackingStatus === 'delivered') ? '#10b981' : '#d1d5db'}`,
+                            display: 'inline-block'
+                          }}>
+                            <p style={{ margin: 0, fontSize: '14px', color: (order.trackingStatus === 'out_for_delivery') ? '#92400e' : (order.trackingStatus === 'delivered') ? '#065f46' : '#374151', fontWeight: 600 }}>
+                              {(order.trackingStatus === 'out_for_delivery') ? '🚚 Out for Delivery' : (order.trackingStatus === 'delivered') ? '✓ Delivered' : '📦 Pending Delivery'}
+                            </p>
+                            {order.outForDelivery && (
+                              <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
+                                Out: {formatDate(order.outForDelivery)}
+                              </p>
+                            )}
+                            {order.deliveredAt && (
+                              <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
+                                Delivered: {formatDate(order.deliveredAt)}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        {/* Delivery Person Information */}
+                        {order.deliveryPerson && !order.scheduledPickupTime && (
+                          <div style={{ 
+                            margin: '8px 0', 
+                            padding: '8px 12px', 
+                            backgroundColor: '#eff6ff',
+                            borderRadius: '6px',
+                            border: '1px solid #bfdbfe',
+                            display: 'inline-block'
+                          }}>
+                            <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#1e40af' }}>
+                              🚚 Delivery Person:
+                            </p>
+                            <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#1e3a8a' }}>
+                              {order.deliveryPerson.name || order.deliveryPerson.email}
+                            </p>
+                            {order.deliveryPerson.phone && (
+                              <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#3b82f6' }}>
+                                📞 {order.deliveryPerson.phone}
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <p style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>
@@ -988,6 +1252,11 @@ export default function WholesaleCart() {
                                   return subtotal.toFixed(2);
                                 })()}
                               </p>
+                              {order.scheduledPickupTime && (
+                                <p style={{ margin: '2px 0', fontSize: '11px', color: '#2563eb', fontWeight: 600 }}>
+                                  📅 Store Pickup: {formatDateOnly(order.scheduledPickupTime)}
+                                </p>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -995,7 +1264,8 @@ export default function WholesaleCart() {
                     </div>
                   </div>
                 ))}
-              </div>
+                </div>
+              )}
             </div>
           )}
 

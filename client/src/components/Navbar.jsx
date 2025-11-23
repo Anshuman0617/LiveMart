@@ -53,11 +53,13 @@ export default function Navbar() {
         <button 
           className="navbar-brand" 
           onClick={() => {
-            // For retailers, go to retailer dashboard; otherwise go to products
+            // For retailers, go to retailer dashboard; for wholesalers, go to wholesaler dashboard; for delivery, go to delivery dashboard; otherwise go to products
             if (user?.role == 'retailer') {
               nav('/retailer');
-            }else if (user?.role == 'wholesaler') {
+            } else if (user?.role == 'wholesaler') {
               nav('/wholesaler');
+            } else if (user?.role == 'delivery') {
+              nav('/delivery');
             } else {
               nav('/');
             }
@@ -71,15 +73,15 @@ export default function Navbar() {
           className="navbar-links"
           style={{ display: "flex", gap: 12, alignItems: "center" }}
         >
-          {/* Products - Hidden for retailers */}
-          {user?.role !== 'retailer' && user?.role !== 'wholesaler' && (
+          {/* Products - Hidden for retailers, wholesalers, and delivery persons */}
+          {user?.role !== 'retailer' && user?.role !== 'wholesaler' && user?.role !== 'delivery' && (
             <button className="nav-button" onClick={() => nav('/')}>
               Products
             </button>
           )}
 
-          {/* Cart - Hidden for retailers */}
-          {user?.role !== 'retailer' && user?.role !== 'wholesaler' && (
+          {/* Cart - Hidden for retailers, wholesalers, and delivery persons */}
+          {user?.role !== 'retailer' && user?.role !== 'wholesaler' && user?.role !== 'delivery' && (
             <button className="nav-button" onClick={() => nav('/cart')}>
               Cart
             </button>
@@ -119,6 +121,15 @@ export default function Navbar() {
               onClick={() => nav('/orders')}
             >
               Manage Orders
+            </button>
+          )}
+
+          {user?.role == "delivery" && (
+            <button
+              className="nav-button"
+              onClick={() => nav('/delivery')}
+            >
+              Delivery Dashboard
             </button>
           )}
         </div>

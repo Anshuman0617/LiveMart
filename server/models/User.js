@@ -7,7 +7,7 @@ export default (sequelize) => {
     id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
     email: { type: DataTypes.STRING, unique: true, allowNull: false },
     name: { type: DataTypes.STRING, allowNull: false },
-    role: { type: DataTypes.ENUM('customer','retailer','wholesaler','admin'), defaultValue: 'customer' },
+    role: { type: DataTypes.ENUM('customer','retailer','wholesaler','admin','delivery'), defaultValue: 'customer' },
     passwordHash: { type: DataTypes.STRING, allowNull: true },
     provider: { type: DataTypes.STRING, allowNull: true },
     providerId: { type: DataTypes.STRING, allowNull: true },

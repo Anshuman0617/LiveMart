@@ -2,8 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import { api, authHeader } from '../api';
 import AddressAutocomplete from './AddressAutocomplete';
+import { useModal } from '../hooks/useModal';
 
 export default function ProfileSettings({ user, onClose, onSave, forceOpen = false }) {
+  const { showModal, ModalComponent } = useModal();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [userData, setUserData] = useState(user);
@@ -161,12 +163,12 @@ export default function ProfileSettings({ user, onClose, onSave, forceOpen = fal
     }
     
     if (!fullAddress) {
-      alert('Please enter your complete address');
+      showModal('Please enter your complete address', 'Missing Address', 'warning');
       return;
     }
 
     if (!phone.trim()) {
-      alert('Please enter your phone number');
+      showModal('Please enter your phone number', 'Missing Phone Number', 'warning');
       return;
     }
 
@@ -197,7 +199,7 @@ export default function ProfileSettings({ user, onClose, onSave, forceOpen = fal
       localStorage.setItem('user', JSON.stringify(newUser));
       window.dispatchEvent(new Event('userLogin'));
 
-      alert('Settings saved successfully!');
+      showModal('Settings saved successfully!', "Success", "success");
       onSave(newUser);
       
       // If this was a forced open (new seller), allow closing now
@@ -212,14 +214,16 @@ export default function ProfileSettings({ user, onClose, onSave, forceOpen = fal
       }
     } catch (err) {
       console.error('Failed to save settings:', err);
-      alert(err.response?.data?.error || 'Failed to save settings. Please try again.');
+      showModal(err.response?.data?.error || 'Failed to save settings. Please try again.', "Error", "error");
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div
+    <>
+      <ModalComponent />
+      <div
       style={{
         position: 'fixed',
         top: 0,
@@ -237,7 +241,7 @@ export default function ProfileSettings({ user, onClose, onSave, forceOpen = fal
         if (forceOpen) {
           // Only allow closing if clicking directly on the backdrop (not the modal content)
           if (e.target === e.currentTarget) {
-            alert('Please set your phone number and address before closing. These are required for retailers and wholesalers.');
+            showModal('Please set your phone number and address before closing. These are required for retailers and wholesalers.', 'Required Fields', 'warning');
             return;
           }
         } else {
@@ -610,6 +614,7 @@ export default function ProfileSettings({ user, onClose, onSave, forceOpen = fal
         )}
       </div>
     </div>
+    </>
   );
 }
 
