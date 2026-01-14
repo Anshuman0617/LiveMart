@@ -11,8 +11,8 @@ Key System Features:
 5) Real-Time Synchronization: Automated stock updates and live "sold product" counts across all stakeholder dashboards.
 
 Technical Specifications:
-Frontend: React.js (v19.2.0), HTML5, CSS3 (Flexbox/Grid), and JavaScript ES6+.
-Backend: Node.js (v22.21.0 LTS) and Express.js (v5.1.0).
-Database: PostgreSQL (v17.6) with Sequelize ORM.
-Authentication: JWT (JSON Web Tokens), Google OAuth integration, and OTP-based email verification via Nodemailer.
-External APIs: Google Maps, Google Places, and PayU Money.
+1) Frontend: React.js (v19.2.0), HTML5, CSS3 (Flexbox/Grid), and JavaScript ES6+.
+2) Backend: Node.js (v22.21.0 LTS) and Express.js (v5.1.0).
+3) Database: PostgreSQL (v17.6) with Sequelize ORM.
+4) Authentication: JWT (JSON Web Tokens), Google OAuth integration, and OTP-based email verification via Nodemailer.
+5) External APIs: Google Maps, Google Places, and PayU Money.
